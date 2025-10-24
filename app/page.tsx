@@ -117,7 +117,7 @@ export default function ProductionPlanner() {
 
               <div>
                 <h1 className="font-['Libre_Baskerville'] text-3xl tracking-[0.2rem] text-white font-bold">
-                  SISTEMA DE PRODUCCIÓN
+                  OBRADOR SHORONPO — SISTEMA DE PRODUCCIÓN
                 </h1>
                 <p className="text-white/80 text-sm tracking-[0.15rem] mt-1 font-light">
                   Planificación y Gestión • 酒場
@@ -127,7 +127,7 @@ export default function ProductionPlanner() {
 
             <div className="hidden lg:flex items-center gap-4">
               <div className="bg-white/10 backdrop-blur-md px-4 py-2 rounded-xl border border-white/20">
-                <div className="text-white/70 text-xs font-light">Sección Actual</div>
+                <div className="text-white/70 text-xs font-light">Obrador</div>
                 <div className="text-white font-bold text-sm mt-0.5">{currentSection?.name}</div>
               </div>
               <button
@@ -246,19 +246,9 @@ export default function ProductionPlanner() {
                 SHORONPO 小籠包
               </h3>
               <p className="text-xs leading-relaxed text-white/70">
-                Tanaka's ramens & shoronpos. Traditional recipes, special flavours.
-              </p>
-            </div>
-            <div>
-              <h3 className="font-['Libre_Baskerville'] text-base tracking-wider text-white mb-3 font-bold">
-                UBICACIÓN
-              </h3>
-              <p className="text-xs leading-relaxed text-white/70">
-                C/ Dr. Rizal Nº20
+                Obrador especializado en gastronomía japonesa y asiática.
                 <br />
-                Barcelona 08006
-                <br />
-                酒場 (Sakaba)
+                Planificación y control de producción.
               </p>
             </div>
             <div>
@@ -267,7 +257,7 @@ export default function ProductionPlanner() {
                 Sistema de Planificación de Producción
                 <br />
                 Versión 1.0
-                <br />© 2025 Shoronpo
+                <br />© 2025 Martín Moore
               </p>
             </div>
           </div>

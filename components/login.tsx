@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-
 import { useState } from "react"
 import Image from "next/image"
 
@@ -21,7 +20,7 @@ export default function Login({ onLogin }: LoginProps) {
 
     // Simular un pequeño delay para mejor UX
     setTimeout(() => {
-      const storedPassword = localStorage.getItem("shoronpo_password") || "shoronpo2025"
+      const storedPassword = localStorage.getItem("shoronpo_password") || "obradorloco"
 
       if (password === storedPassword) {
         localStorage.setItem("shoronpo_authenticated", "true")
@@ -103,13 +102,6 @@ export default function Login({ onLogin }: LoginProps) {
             {isLoading ? "VERIFICANDO..." : "INGRESAR"}
           </button>
         </form>
-
-        <div className="mt-6 pt-6 border-t border-gray-200 text-center">
-          <p className="text-xs text-gray-500">
-            Contraseña por defecto: <span className="font-mono font-bold">shoronpo2025</span>
-          </p>
-          <p className="text-xs text-gray-400 mt-2">Puedes cambiarla en la sección de Configuración</p>
-        </div>
       </div>
     </div>
   )

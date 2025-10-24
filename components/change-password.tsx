@@ -14,7 +14,7 @@ export default function ChangePassword() {
     e.preventDefault()
     setMessage(null)
 
-    const storedPassword = localStorage.getItem("shoronpo_password") || "shoronpo2025"
+    const storedPassword = localStorage.getItem("shoronpo_password") || "obradorloco"
 
     if (currentPassword !== storedPassword) {
       setMessage({ type: "error", text: "La contraseña actual es incorrecta" })
