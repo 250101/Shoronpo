@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Inventario Shoronpo</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  /* ── Reset y base ─────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #f4f4f2;
+    --surface: #ffffff;
+    --surface2: #f9f9f7;
+    --border: #e2e1dc;
+    --text: #1a1a18;
+    --text2: #52514e;
+    --text3: #898781;
+    --accent: #1a3a5c;
+    --accent-light: #e6eef5;
+    --red: #d03b3b;    --red-bg: #fdf0f0;    --red-text: #8b1a1a;
+    --amber: #b87b00;  --amber-bg: #fef8ec;  --amber-text: #7a4f00;
+    --green: #2d7a3a;  --green-bg: #edf7ef;  --green-text: #1a4d24;
+    --radius: 8px;
+    --shadow: 0 1px 3px rgba(0,0,0,.08);
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.5; }
+  a { color: inherit; }
+
+  /* ── Layout ───────────────────────────────────── */
+  .wrapper { max-width: 1100px; margin: 0 auto; padding: 24px 16px; }
+  .topbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; flex-wrap: wrap; gap: 12px; }
+  .logo { font-size: 20px; font-weight: 600; color: var(--accent); letter-spacing: -.3px; }
+  .logo span { font-weight: 400; font-size: 13px; color: var(--text3); margin-left: 8px; }
+  .q-badge { font-size: 12px; font-weight: 500; background: var(--accent-light); color: var(--accent); padding: 5px 14px; border-radius: 20px; }
+
+  /* ── Upload ───────────────────────────────────── */
+  .upload-zone { border: 2px dashed var(--border); border-radius: 12px; padding: 48px 24px; text-align: center; cursor: pointer; transition: border-color .2s, background .2s; background: var(--surface); margin-bottom: 24px; }
+  .upload-zone:hover, .upload-zone.drag { border-color: var(--accent); background: var(--accent-light); }
+  .upload-icon { font-size: 40px; margin-bottom: 12px; color: var(--text3); }
+  .upload-zone h3 { font-size: 16px; font-weight: 500; margin-bottom: 6px; }
+  .upload-zone p { font-size: 13px; color: var(--text3); }
+  input[type=file] { display: none; }
+
+  /* ── Notificaciones ───────────────────────────── */
+  .notice { border-radius: var(--radius); padding: 10px 14px; font-size: 13px; margin-bottom: 16px; display: none; }
+  .notice.ok  { background: var(--green-bg); color: var(--green-text); border: 1px solid #b6deba; }
+  .notice.err { background: var(--red-bg);   color: var(--red-text);   border: 1px solid #f5c0c0; }
+  .notice.inf { background: var(--accent-light); color: var(--accent); border: 1px solid #c0d4e8; }
+
+  /* ── KPIs ─────────────────────────────────────── */
+  .kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 24px; }
+  .kpi { background: var(--surface); border-radius: var(--radius); padding: 16px; border: 1px solid var(--border); }
+  .kpi-label { font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 8px; }
+  .kpi-val { font-size: 28px; font-weight: 600; }
+  .kpi-val.accent { color: var(--accent); }
+  .kpi-val.red    { color: var(--red); }
+  .kpi-val.amber  { color: var(--amber); }
+  .kpi-val.green  { color: var(--green); }
+
+  /* ── Grid 2 cols ──────────────────────────────── */
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+  @media (max-width: 640px) { .grid2 { grid-template-columns: 1fr; } }
+
+  /* ── Cards ────────────────────────────────────── */
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+  .card-title { font-size: 11px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 16px; }
+
+  /* ── Barras ───────────────────────────────────── */
+  .bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .bar-name { font-size: 12px; color: var(--text2); width: 120px; flex-shrink: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bar-track { flex: 1; height: 8px; background: var(--bg); border-radius: 4px; overflow: hidden; }
+  .bar-fill  { height: 100%; border-radius: 4px; transition: width .5s ease; }
+  .bar-pct   { font-size: 12px; font-weight: 500; width: 50px; text-align: right; flex-shrink: 0; }
+
+  /* ── Tabla familia ────────────────────────────── */
+  .fam-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .fam-table th { color: var(--text3); font-weight: 600; text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+  .fam-table td { padding: 7px 8px; border-bottom: 1px solid var(--border); }
+  .fam-table tr:last-child td { border-bottom: none; }
+
+  /* ── Comparación ──────────────────────────────── */
+  .comp-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 16px; }
+  .comp-card { background: var(--surface2); border-radius: var(--radius); padding: 12px 14px; border: 1px solid var(--border); }
+  .comp-card-label { font-size: 11px; color: var(--text3); margin-bottom: 6px; }
+  .comp-card-val { font-size: 18px; font-weight: 600; }
+  .comp-delta { font-size: 11px; margin-top: 3px; }
+  .delta-bad  { color: var(--red); }
+  .delta-good { color: var(--green); }
+  .delta-neu  { color: var(--text3); }
+  .recur-wrap { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+  .recur-tag  { font-size: 11px; padding: 3px 10px; border-radius: 20px; }
+  .tag-red    { background: var(--red-bg);   color: var(--red-text);   border: 1px solid #f5c0c0; }
+  .tag-gray   { background: var(--surface2); color: var(--text3);      border: 1px solid var(--border); }
+
+  /* ── Filtros y tabla detalle ──────────────────── */
+  .filter-row { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+  .fbtn { font-size: 11px; padding: 5px 12px; border-radius: 20px; border: 1px solid var(--border); background: transparent; color: var(--text2); cursor: pointer; transition: all .15s; }
+  .fbtn:hover { border-color: #aaa; }
+  .fbtn.f-all   { background: var(--text); color: #fff; border-color: var(--text); }
+  .fbtn.f-red   { background: var(--red-bg);   color: var(--red-text);   border-color: #f5c0c0; }
+  .fbtn.f-amber { background: var(--amber-bg); color: var(--amber-text); border-color: #f5d88a; }
+  .fbtn.f-green { background: var(--green-bg); color: var(--green-text); border-color: #b6deba; }
+  .tbl-wrap { overflow-x: auto; }
+  .dtbl { width: 100%; border-collapse: collapse; font-size: 12px; table-layout: fixed; }
+  .dtbl th { color: var(--text3); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; padding: 7px 8px; border-bottom: 1px solid var(--border); text-align: left; white-space: nowrap; }
+  .dtbl td { padding: 7px 8px; border-bottom: 1px solid var(--border); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dtbl tr:last-child td { border-bottom: none; }
+  .dtbl tr:hover td { background: var(--surface2); }
+
+  /* ── Pills / dots ─────────────────────────────── */
+  .pill { display: inline-block; font-size: 10px; font-weight: 600; border-radius: 20px; padding: 2px 8px; }
+  .p-red   { background: var(--red-bg);   color: var(--red-text); }
+  .p-amber { background: var(--amber-bg); color: var(--amber-text); }
+  .p-green { background: var(--green-bg); color: var(--green-text); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 5px; vertical-align: middle; }
+  .d-red   { background: var(--red); }
+  .d-amber { background: var(--amber); }
+  .d-green { background: var(--green); }
+
+  /* ── Histórico ────────────────────────────────── */
+  .hist-section { margin-top: 24px; }
+  .chart-wrap { position: relative; height: 220px; margin-bottom: 16px; }
+
+  /* ── Acciones ─────────────────────────────────── */
+  .actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; flex-wrap: wrap; }
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 18px; border-radius: var(--radius); font-size: 13px; font-weight: 500; cursor: pointer; border: 1px solid var(--border); background: var(--surface); color: var(--text); transition: all .15s; }
+  .btn:hover { background: var(--surface2); border-color: #aaa; }
+  .btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .btn-primary:hover { opacity: .9; }
+  .btn svg { width: 16px; height: 16px; }
+
+  /* ── Spinner ──────────────────────────────────── */
+  .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid rgba(255,255,255,.4); border-top-color: #fff; border-radius: 50%; animation: spin .6s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Conexión config ──────────────────────────── */
+  .config-bar { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 16px; margin-bottom: 16px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 12px; color: var(--text3); }
+  .config-bar input { flex: 1; min-width: 200px; font-size: 12px; padding: 5px 10px; border: 1px solid var(--border); border-radius: 6px; }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #ccc; flex-shrink: 0; }
+  .status-dot.connected { background: var(--green); }
+  .status-dot.error { background: var(--red); }
+</style>
+</head>
+<body>
+<div class="wrapper">
+
+  <!-- Topbar -->
+  <div class="topbar">
+    <div class="logo">Shoronpo <span>Inventario · Obrador Elaborados</span></div>
+    <div id="qbadge" class="q-badge" style="display:none"></div>
+  </div>
+
+  <!-- Config conexión -->
+  <div class="config-bar">
+    <div class="status-dot" id="statusDot"></div>
+    <span>URL del Apps Script:</span>
+    <input type="text" id="apiUrl" placeholder="Pegá acá la URL de tu Apps Script desplegado" oninput="saveApiUrl()">
+    <button class="btn" onclick="testConnection()" style="white-space:nowrap">Probar conexión</button>
+  </div>
+
+  <!-- Notices -->
+  <div class="notice" id="notice"></div>
+
+  <!-- Upload -->
+  <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()">
+    <div class="upload-icon">📂</div>
+    <h3>Subí el export del sistema</h3>
+    <p>Arrastrá o hacé clic para seleccionar el .xlsx de inventario</p>
+    <input type="file" id="fileInput" accept=".xlsx,.xls">
+  </div>
+
+  <!-- Dashboard (oculto hasta cargar datos) -->
+  <div id="dashboard" style="display:none">
+
+    <!-- KPIs -->
+    <div class="kpi-row" id="kpiRow"></div>
+
+    <!-- Barras + Familias -->
+    <div class="grid2">
+      <div class="card">
+        <div class="card-title">Top desvíos por impacto €</div>
+        <div id="barChart"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Resumen por familia</div>
+        <table class="fam-table">
+          <thead><tr><th>Familia</th><th>Prod.</th><th>Estado</th></tr></thead>
+          <tbody id="famBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Comparación con anterior -->
+    <div class="card" id="compSection" style="display:none;margin-bottom:24px">
+      <div class="card-title">Comparación con quincena anterior</div>
+      <div class="comp-cards" id="compCards"></div>
+      <div class="card-title" style="margin-top:14px">Productos con desvío elevado recurrente</div>
+      <div class="recur-wrap" id="recurWrap"></div>
+    </div>
+
+    <!-- Detalle productos -->
+    <div class="card" style="margin-bottom:24px">
+      <div class="card-title">Detalle de productos</div>
+      <div class="filter-row">
+        <button class="fbtn f-all" onclick="setFilter('all',this)">Todos</button>
+        <button class="fbtn" onclick="setFilter('ELEVADA',this)">Elevada</button>
+        <button class="fbtn" onclick="setFilter('LEVE',this)">Leve</button>
+        <button class="fbtn" onclick="setFilter('COINCIDE',this)">Coincide</button>
+      </div>
+      <div class="tbl-wrap">
+        <table class="dtbl">
+          <thead><tr>
+            <th style="width:22%">Producto</th>
+            <th style="width:14%">Familia</th>
+            <th style="width:7%">Unidad</th>
+            <th style="width:10%">Teórico</th>
+            <th style="width:10%">Real</th>
+            <th style="width:10%">% Desv.</th>
+            <th style="width:12%">Impacto €</th>
+            <th style="width:15%">Estado</th>
+          </tr></thead>
+          <tbody id="detailBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Histórico -->
+    <div class="hist-section card" id="histSection" style="display:none;margin-bottom:24px">
+      <div class="card-title">Evolución histórica — desvíos elevados por quincena</div>
+      <div class="chart-wrap"><canvas id="histChart" role="img" aria-label="Gráfico de desvíos elevados por quincena">Evolución de productos con desvío elevado a lo largo del tiempo.</canvas></div>
+      <div class="card-title" style="margin-top:16px">Resumen por quincena</div>
+      <div class="tbl-wrap">
+        <table class="fam-table" id="histTable"></table>
+      </div>
+    </div>
+
+    <!-- Acciones -->
+    <div class="actions">
+      <button class="btn" onclick="document.getElementById('fileInput').click()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        Cargar nuevo export
+      </button>
+      <button class="btn btn-primary" id="btnCerrar" onclick="cerrarQuincena()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v14a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+        Cerrar quincena → Sheets
+      </button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ── Config ───────────────────────────────────────────────────
+let APPS_SCRIPT_URL = localStorage.getItem('shoronpo_api_url') || '';
+let currentData = [];
+let historico   = { quincenas: [], productos: [] };
+let activeFilter = 'all';
+let histChartInstance = null;
+
+document.getElementById('apiUrl').value = APPS_SCRIPT_URL;
+if (APPS_SCRIPT_URL) testConnection();
+
+function saveApiUrl() {
+  APPS_SCRIPT_URL = document.getElementById('apiUrl').value.trim();
+  localStorage.setItem('shoronpo_api_url', APPS_SCRIPT_URL);
+}
+
+async function testConnection() {
+  if (!APPS_SCRIPT_URL) { showNotice('Pegá la URL del Apps Script primero.', 'err'); return; }
+  const dot = document.getElementById('statusDot');
+  dot.className = 'status-dot';
+  try {
+    const r = await fetch(APPS_SCRIPT_URL + '?action=ping');
+    const d = await r.json();
+    if (d.ok) {
+      dot.className = 'status-dot connected';
+      showNotice('Conexión con Google Sheets OK.', 'ok');
+      await fetchHistorico();
+    } else throw new Error(d.error || 'Error');
+  } catch(e) {
+    dot.className = 'status-dot error';
+    showNotice('No se pudo conectar. Verificá la URL del Apps Script.', 'err');
+  }
+}
+
+// ── Histórico desde Sheets ───────────────────────────────────
+async function fetchHistorico() {
+  if (!APPS_SCRIPT_URL) return;
+  try {
+    const r = await fetch(APPS_SCRIPT_URL + '?action=get');
+    const d = await r.json();
+    if (d.ok) {
+      historico = d;
+      if (historico.quincenas.length > 0) renderHistorico();
+    }
+  } catch(e) {}
+}
+
+// ── Parse Excel ──────────────────────────────────────────────
+function getEstado(pct) {
+  const a = Math.abs(pct);
+  if (a <= 0.02) return 'COINCIDE';
+  if (a <= 0.15) return 'LEVE';
+  return 'ELEVADA';
+}
+
+function parseXLSX(file) {
+  return new Promise((res, rej) => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      try {
+        const wb = XLSX.read(e.target.result, { type: 'array' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+        let hi = -1;
+        for (let i = 0; i < rows.length; i++) {
+          const r = rows[i].map(c => String(c).trim());
+          if (r.includes('Familia') && r.includes('Producto') && r.includes('% desviación')) { hi = i; break; }
+        }
+        if (hi < 0) { rej('No encontré las columnas esperadas.'); return; }
+        const h = rows[hi].map(c => String(c).trim());
+        const idx = k => h.indexOf(k);
+        const iF=idx('Familia'), iP=idx('Producto'), iU=idx('Unidad');
+        const iCT=idx('Cant. teórica'), iCR=idx('Cant. real');
+        const iCD=idx('Cant. desviación'), iPD=idx('% desviación');
+        const iKT=idx('Coste teórico'), iKR=idx('Coste real');
+        const data = [];
+        for (let i = hi + 1; i < rows.length; i++) {
+          const r = rows[i];
+          const prod = String(r[iP] || '').trim();
+          if (!prod) continue;
+          const pct = parseFloat(r[iPD]) || 0;
+          const ct  = parseFloat(r[iKT]) || 0;
+          const cr  = parseFloat(r[iKR]) || 0;
+          data.push({
+            familia: String(r[iF]||'').trim() || 'Sin categoría',
+            producto: prod,
+            unidad: String(r[iU]||'').trim(),
+            cantTeo: parseFloat(r[iCT])||0,
+            cantReal: parseFloat(r[iCR])||0,
+            desv: parseFloat(r[iCD])||0,
+            pct, costeTeo: ct, costeReal: cr,
+            impacto: Math.abs(cr - ct),
+            estado: getEstado(pct)
+          });
+        }
+        res(data);
+      } catch(err) { rej('Error leyendo archivo: ' + err.message); }
+    };
+    reader.onerror = () => rej('No se pudo leer el archivo.');
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+// ── Render funciones ─────────────────────────────────────────
+function renderKPIs(data) {
+  const total    = data.length;
+  const coincide = data.filter(d => d.estado==='COINCIDE').length;
+  const leve     = data.filter(d => d.estado==='LEVE').length;
+  const elevada  = data.filter(d => d.estado==='ELEVADA').length;
+  const impacto  = data.reduce((s,d) => s+(d.estado!=='COINCIDE'?d.impacto:0), 0);
+  document.getElementById('kpiRow').innerHTML = `
+    <div class="kpi"><div class="kpi-label">Total productos</div><div class="kpi-val accent">${total}</div></div>
+    <div class="kpi"><div class="kpi-label">Coincide (0–2%)</div><div class="kpi-val green">${coincide}</div></div>
+    <div class="kpi"><div class="kpi-label">Desvío leve (2–15%)</div><div class="kpi-val amber">${leve}</div></div>
+    <div class="kpi"><div class="kpi-label">Desvío elevado (+15%)</div><div class="kpi-val red">${elevada}</div></div>
+    <div class="kpi"><div class="kpi-label">Impacto económico</div><div class="kpi-val red">€ ${impacto.toFixed(0)}</div></div>
+  `;
+}
+
+function renderBars(data) {
+  const sorted = [...data].filter(d => d.estado!=='COINCIDE').sort((a,b)=>b.impacto-a.impacto).slice(0,8);
+  const max = sorted[0]?.impacto || 1;
+  document.getElementById('barChart').innerHTML = sorted.map(d => {
+    const w   = Math.round((d.impacto/max)*100);
+    const pct = (d.pct>=0?'+':'')+(d.pct*100).toFixed(1)+'%';
+    const col = d.estado==='ELEVADA' ? 'var(--red)' : 'var(--amber)';
+    const tc  = d.estado==='ELEVADA' ? 'var(--red)' : 'var(--amber)';
+    return `<div class="bar-row">
+      <div class="bar-name" title="${d.producto}">${d.producto}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${w}%;background:${col}"></div></div>
+      <div class="bar-pct" style="color:${tc}">${pct}</div>
+    </div>`;
+  }).join('') || '<p style="font-size:12px;color:var(--text3);text-align:center;padding:1rem">Sin desvíos significativos.</p>';
+}
+
+function renderFamilias(data) {
+  const map = {};
+  data.forEach(d => {
+    if (!map[d.familia]) map[d.familia] = {total:0,elevada:0,leve:0};
+    map[d.familia].total++;
+    if (d.estado==='ELEVADA') map[d.familia].elevada++;
+    else if (d.estado==='LEVE') map[d.familia].leve++;
+  });
+  document.getElementById('famBody').innerHTML = Object.entries(map)
+    .sort((a,b)=>b[1].elevada-a[1].elevada)
+    .map(([fam,v]) => {
+      const pill = v.elevada>0
+        ? '<span class="pill p-red">Elevada</span>'
+        : v.leve>0
+          ? '<span class="pill p-amber">Leve</span>'
+          : '<span class="pill p-green">OK</span>';
+      return `<tr><td>${fam}</td><td>${v.total}</td><td>${pill}</td></tr>`;
+    }).join('');
+}
+
+function renderDetail(data) {
+  const filtered = activeFilter==='all' ? data : data.filter(d=>d.estado===activeFilter);
+  const sorted   = [...filtered].sort((a,b)=>b.impacto-a.impacto);
+  document.getElementById('detailBody').innerHTML = sorted.map(d => {
+    const pct  = (d.pct>=0?'+':'')+(d.pct*100).toFixed(1)+'%';
+    const dot  = d.estado==='ELEVADA'?'d-red':d.estado==='LEVE'?'d-amber':'d-green';
+    const pill = d.estado==='ELEVADA'?'p-red':d.estado==='LEVE'?'p-amber':'p-green';
+    const lab  = d.estado==='ELEVADA'?'Elevada':d.estado==='LEVE'?'Leve':'Coincide';
+    return `<tr>
+      <td title="${d.producto}">${d.producto}</td>
+      <td>${d.familia}</td><td>${d.unidad}</td>
+      <td>${d.cantTeo.toFixed(2)}</td><td>${d.cantReal.toFixed(2)}</td>
+      <td><span class="dot ${dot}"></span>${pct}</td>
+      <td>€ ${d.impacto.toFixed(2)}</td>
+      <td><span class="pill ${pill}">${lab}</span></td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="8" style="text-align:center;color:var(--text3);padding:1rem">Sin productos en este estado.</td></tr>';
+}
+
+function renderComparacion(data) {
+  if (!historico.quincenas || historico.quincenas.length === 0) { document.getElementById('compSection').style.display='none'; return; }
+  const prevQ = historico.quincenas[historico.quincenas.length-1];
+  const prevProds = historico.productos.filter(p => p.quincena === prevQ.quincena);
+
+  const curElev  = data.filter(d=>d.estado==='ELEVADA').length;
+  const prevElev = parseInt(prevQ.elevada)||0;
+  const curImp   = data.reduce((s,d)=>s+(d.estado!=='COINCIDE'?d.impacto:0),0);
+  const prevImp  = parseFloat(prevQ.impacto)||0;
+  const curCoin  = data.filter(d=>d.estado==='COINCIDE').length;
+  const prevCoin = parseInt(prevQ.coincide)||0;
+
+  function delta(cur, prev, higherIsBad) {
+    const d = cur - prev;
+    if (Math.abs(d) < 0.5) return '<div class="comp-delta delta-neu">Sin cambio</div>';
+    const cls = (higherIsBad ? d>0 : d<0) ? 'delta-bad' : 'delta-good';
+    return `<div class="comp-delta ${cls}">${d>0?'+':''}${typeof cur==='number'&&cur%1!==0?d.toFixed(0):d} vs ${prevQ.quincena}</div>`;
+  }
+
+  document.getElementById('compCards').innerHTML = `
+    <div class="comp-card"><div class="comp-card-label">Desvíos elevados</div><div class="comp-card-val" style="color:var(--red)">${curElev}</div>${delta(curElev,prevElev,true)}</div>
+    <div class="comp-card"><div class="comp-card-label">Coinciden</div><div class="comp-card-val" style="color:var(--green)">${curCoin}</div>${delta(curCoin,prevCoin,false)}</div>
+    <div class="comp-card"><div class="comp-card-label">Impacto €</div><div class="comp-card-val">€ ${curImp.toFixed(0)}</div>${delta(curImp,prevImp,true)}</div>
+  `;
+
+  const prevElevSet = new Set(prevProds.filter(p=>p.estado==='ELEVADA').map(p=>p.producto));
+  const curElevSet  = new Set(data.filter(d=>d.estado==='ELEVADA').map(d=>d.producto));
+  const recur = [...curElevSet].filter(p=>prevElevSet.has(p));
+  const nuevo = [...curElevSet].filter(p=>!prevElevSet.has(p));
+
+  document.getElementById('recurWrap').innerHTML =
+    recur.map(p=>`<span class="recur-tag tag-red" title="Elevado también en ${prevQ.quincena}">${p}</span>`).join('') +
+    nuevo.map(p=>`<span class="recur-tag tag-gray">${p}</span>`).join('') ||
+    '<span style="font-size:12px;color:var(--text3)">Sin desvíos elevados recurrentes.</span>';
+
+  document.getElementById('compSection').style.display = 'block';
+}
+
+function renderHistorico() {
+  if (!historico.quincenas || historico.quincenas.length === 0) { document.getElementById('histSection').style.display='none'; return; }
+
+  const labels   = historico.quincenas.map(q=>q.quincena);
+  const elevados = historico.quincenas.map(q=>parseInt(q.elevada)||0);
+  const leves    = historico.quincenas.map(q=>parseInt(q.leve)||0);
+
+  if (histChartInstance) histChartInstance.destroy();
+  histChartInstance = new Chart(document.getElementById('histChart'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Elevada', data: elevados, backgroundColor: '#f5c0c0', borderColor: '#d03b3b', borderWidth: 1.5, borderRadius: 4 },
+        { label: 'Leve',    data: leves,    backgroundColor: '#f5e4a0', borderColor: '#b87b00', borderWidth: 1.5, borderRadius: 4 }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { display: false }, ticks: { color: '#898781', font: { size: 11 } } },
+        y: { grid: { color: '#e2e1dc' }, ticks: { color: '#898781', font: { size: 11 }, stepSize: 1 }, beginAtZero: true }
+      }
+    }
+  });
+
+  // Leyenda manual
+  const legEl = document.createElement('div');
+  legEl.style.cssText = 'display:flex;gap:16px;font-size:12px;color:#52514e;margin-bottom:12px';
+  legEl.innerHTML = `<span style="display:flex;align-items:center;gap:5px"><span style="width:10px;height:10px;border-radius:2px;background:#d03b3b;display:inline-block"></span>Elevada</span><span style="display:flex;align-items:center;gap:5px"><span style="width:10px;height:10px;border-radius:2px;background:#b87b00;display:inline-block"></span>Leve</span>`;
+  const chartWrap = document.querySelector('.chart-wrap');
+  chartWrap.parentNode.insertBefore(legEl, chartWrap);
+
+  // Tabla resumen
+  document.getElementById('histTable').innerHTML = `
+    <thead><tr><th>Quincena</th><th>Total</th><th>Elevada</th><th>Leve</th><th>Coincide</th><th>Impacto €</th></tr></thead>
+    <tbody>${historico.quincenas.slice().reverse().map(q=>`
+      <tr>
+        <td style="font-weight:500">${q.quincena}</td>
+        <td>${q.total}</td>
+        <td><span class="pill p-red">${q.elevada}</span></td>
+        <td><span class="pill p-amber">${q.leve}</span></td>
+        <td><span class="pill p-green">${q.coincide}</span></td>
+        <td>€ ${parseFloat(q.impacto||0).toFixed(0)}</td>
+      </tr>`).join('')}
+    </tbody>`;
+
+  document.getElementById('histSection').style.display = 'block';
+}
+
+function setFilter(f, btn) {
+  activeFilter = f;
+  document.querySelectorAll('.fbtn').forEach(b => b.className = 'fbtn');
+  btn.classList.add(f==='all'?'f-all':f==='ELEVADA'?'f-red':f==='LEVE'?'f-amber':'f-green');
+  renderDetail(currentData);
+}
+
+// ── Cerrar quincena ───────────────────────────────────────────
+async function cerrarQuincena() {
+  if (!currentData.length) { showNotice('Primero cargá un export.', 'err'); return; }
+  if (!APPS_SCRIPT_URL) { showNotice('Configurá la URL del Apps Script primero.', 'err'); return; }
+
+  const q = prompt('Nombre de la quincena (ej: Q2 Jun 2026):');
+  if (!q) return;
+  if (!confirm(`¿Guardás la quincena "${q}" en Google Sheets?`)) return;
+
+  const btn = document.getElementById('btnCerrar');
+  btn.innerHTML = '<span class="spinner"></span> Guardando...';
+  btn.disabled = true;
+
+  try {
+    const payload = {
+      action: 'save',
+      quincena: q,
+      fecha: new Date().toISOString(),
+      productos: currentData
+    };
+    const r = await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+    const d = await r.json();
+    if (d.ok) {
+      showNotice(`Quincena "${q}" guardada en Google Sheets. ${currentData.length} productos.`, 'ok');
+      document.getElementById('qbadge').textContent = q;
+      document.getElementById('qbadge').style.display = 'block';
+      await fetchHistorico();
+      renderHistorico();
+      renderComparacion(currentData);
+    } else {
+      showNotice('Error al guardar: ' + (d.error||'desconocido'), 'err');
+    }
+  } catch(e) {
+    showNotice('Error de red: ' + e.message, 'err');
+  } finally {
+    btn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v14a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg> Cerrar quincena → Sheets`;
+    btn.disabled = false;
+  }
+}
+
+// ── File input ────────────────────────────────────────────────
+async function processFile(file) {
+  showNotice('Leyendo archivo...', 'inf');
+  try {
+    const data = await parseXLSX(file);
+    if (!data.length) { showNotice('No se encontraron productos en el archivo.', 'err'); return; }
+    currentData = data;
+    document.getElementById('uploadZone').style.display = 'none';
+    document.getElementById('dashboard').style.display = 'block';
+    renderKPIs(data);
+    renderBars(data);
+    renderFamilias(data);
+    renderDetail(data);
+    renderComparacion(data);
+    renderHistorico();
+    showNotice(`${data.length} productos cargados.`, 'ok');
+  } catch(err) { showNotice('Error: ' + err, 'err'); }
+}
+
+document.getElementById('fileInput').addEventListener('change', e => { if (e.target.files[0]) processFile(e.target.files[0]); });
+const zone = document.getElementById('uploadZone');
+zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag'); });
+zone.addEventListener('dragleave', () => zone.classList.remove('drag'));
+zone.addEventListener('drop', e => { e.preventDefault(); zone.classList.remove('drag'); if (e.dataTransfer.files[0]) processFile(e.dataTransfer.files[0]); });
+
+function showNotice(msg, type='ok') {
+  const n = document.getElementById('notice');
+  n.textContent = msg;
+  n.className = 'notice ' + type;
+  n.style.display = 'block';
+  if (type !== 'err') setTimeout(() => n.style.display='none', 4000);
+}
+
+// Cargar histórico al iniciar si hay URL guardada
+if (APPS_SCRIPT_URL) fetchHistorico();
+</script>
+</body>
+</html>
