@@ -543,6 +543,7 @@ async function cerrarQuincena() {
     };
     const r = await fetch(APPS_SCRIPT_URL, {
       method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify(payload)
     });
     const d = await r.json();
@@ -601,5 +602,4 @@ function showNotice(msg, type='ok') {
 if (APPS_SCRIPT_URL) fetchHistorico();
 </script>
 </body>
-<!-- force static deploy -->
 </html>
