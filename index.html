@@ -285,6 +285,10 @@ async function testConnection() {
   if (!APPS_SCRIPT_URL) { showNotice('Pegá la URL del Apps Script primero.', 'err'); return; }
   const dot = document.getElementById('statusDot');
   dot.className = 'status-dot';
+  APPS_SCRIPT_URL = APPS_SCRIPT_URL.trim().split('?')[0];
+  localStorage.setItem('shoronpo_api_url', APPS_SCRIPT_URL);
+  document.getElementById('apiUrl').value = APPS_SCRIPT_URL;
+  console.log('URL usada:', APPS_SCRIPT_URL);
   try {
     const d = await jsonpCall(APPS_SCRIPT_URL + '?action=ping');
     if (d.ok) {
