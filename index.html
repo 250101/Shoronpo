@@ -274,7 +274,7 @@ function jsonpCall(url) {
     const cleanup = () => { delete window[cbName]; script.remove(); };
     const timeout = setTimeout(() => { cleanup(); reject(new Error('Tiempo de espera agotado.')); }, 15000);
     window[cbName] = (data) => { clearTimeout(timeout); cleanup(); resolve(data); };
-    script.onerror = () => { clearTimeout(timeout); cleanup(); reject(new Error('No se pudo cargar el script (revisá la URL).')); };
+    // onerror deshabilitado: Apps Script hace redirect 302 que dispara onerror prematuramente
     const sep = url.includes('?') ? '&' : '?';
     script.src = url + sep + 'callback=' + cbName;
     document.body.appendChild(script);
