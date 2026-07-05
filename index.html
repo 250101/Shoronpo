@@ -272,7 +272,7 @@ function jsonpCall(url) {
     const cbName = 'shoronpo_cb_' + Date.now() + '_' + Math.floor(Math.random()*10000);
     const script = document.createElement('script');
     const cleanup = () => { delete window[cbName]; script.remove(); };
-    const timeout = setTimeout(() => { cleanup(); reject(new Error('Tiempo de espera agotado.')); }, 15000);
+    const timeout = setTimeout(() => { cleanup(); reject(new Error('Tiempo de espera agotado.')); }, 60000);
     window[cbName] = (data) => { clearTimeout(timeout); cleanup(); resolve(data); };
     // onerror deshabilitado: Apps Script hace redirect 302 que dispara onerror prematuramente
     const sep = url.includes('?') ? '&' : '?';
@@ -551,15 +551,19 @@ async function cerrarQuincena() {
   btn.disabled = true;
 
   try {
-    const payload = {
-      action: 'save',
-      quincena: q,
-      fecha: new Date().toISOString(),
-      productos: currentData
-    };
-    const encoded = encodeURIComponent(JSON.stringify(payload));
-    const sep = APPS_SCRIPT_URL.includes('?') ? '&' : '?';
-    const d = await jsonpCall(APPS_SCRIPT_URL + sep + 'action=save&payload=' + encoded);
+    // Mandar de a lotes de 10 productos para no superar limite de URL
+    const fecha = new Date().toISOString();
+    const loteSize = 10;
+    let lastResult;
+    for (let i = 0; i < currentData.length; i += loteSize) {
+      const lote = currentData.slice(i, i + loteSize);
+      const payload = { action: 'save', quincena: q, fecha, productos: lote, primerLote: i === 0 };
+      const encoded = encodeURIComponent(JSON.stringify(payload));
+      const sep = APPS_SCRIPT_URL.includes('?') ? '&' : '?';
+      lastResult = await jsonpCall(APPS_SCRIPT_URL + sep + 'action=save&payload=' + encoded);
+      if (!lastResult.ok) throw new Error(lastResult.error || 'Error al guardar lote');
+    }
+    const d = lastResult;
     if (d.ok) {
       showNotice(`Quincena "${q}" guardada en Google Sheets. ${currentData.length} productos.`, 'ok');
       document.getElementById('qbadge').textContent = q;
