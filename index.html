@@ -475,7 +475,7 @@ input[type=file]{display:none}
 
 <script>
 // ── Estado global ────────────────────────────────────────────
-let APPS_SCRIPT_URL = localStorage.getItem('shoronpo_api_url')||'';
+let APPS_SCRIPT_URL = localStorage.getItem('shoronpo_api_url')||'https://script.google.com/macros/s/AKfycbyecasXGaMuY_TZJkNdjvoTFp7ORd7ynfsJYUeGYpj-K_R2zatwYZRSJjDNnC_JX7In/exec';
 let currentData=[], historico={quincenas:[],productos:[]};
 let activeFilter='all', sortCol='impacto', sortAsc=false, searchTerm='';
 let gaugeInst=null, histInst=null, histOnlyInst=null, scatterInst=null, panelChartInst=null;
@@ -716,8 +716,9 @@ function renderKPIs(data){
   const leve=data.filter(d=>d.estado==='LEVE').length,elev=data.filter(d=>d.estado==='ELEVADA').length;
   const imp=data.reduce((s,d)=>s+(d.estado!=='COINCIDE'?d.impacto:0),0);
   const acc=Math.round(coin/tot*100);
-  let prevQ=historico.quincenas.length?historico.quincenas[[...historico.quincenas].sort((a,b)=>new Date(b.fecha)-new Date(a.fecha))[0]?historico.quincenas.length-1:0]:null;
-  if(historico.quincenas.length) prevQ=[...historico.quincenas].sort((a,b)=>new Date(b.fecha)-new Date(a.fecha))[0];
+  // Penúltima quincena para comparar tendencias
+  const sortedForKpi=[...historico.quincenas].sort((a,b)=>new Date(b.fecha)-new Date(a.fecha));
+  const prevQ=sortedForKpi.length>1?sortedForKpi[1]:null;
 
   function trend(cur,prev,higherIsBad){
     if(!prevQ) return '';
@@ -739,7 +740,9 @@ function renderKPIs(data){
 // ── Comparación ───────────────────────────────────────────────
 function renderComparacion(data){
   if(!historico.quincenas||!historico.quincenas.length){document.getElementById('compHero').style.display='none';return;}
-  const prevQ=[...historico.quincenas].sort((a,b)=>new Date(b.fecha)-new Date(a.fecha))[0];
+  const sortedQ=[...historico.quincenas].sort((a,b)=>new Date(b.fecha)-new Date(a.fecha));
+  // Usar el penúltimo inventario para comparar (el último es el recién cargado)
+  const prevQ=sortedQ.length>1?sortedQ[1]:sortedQ[0];
   const prevProds=historico.productos.filter(p=>p.quincena===prevQ.quincena);
   const curElev=data.filter(d=>d.estado==='ELEVADA').length;
   const curCoin=data.filter(d=>d.estado==='COINCIDE').length;
