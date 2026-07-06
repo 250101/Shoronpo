@@ -221,6 +221,18 @@ input[type=file]{display:none}
 .empty{text-align:center;padding:2.5rem 1rem;color:var(--text3)}
 .empty-icon{font-size:36px;margin-bottom:8px}
 
+/* Comparar */
+.comp-kpi-a{border-top:4px solid var(--blue)}
+.comp-kpi-b{border-top:4px solid var(--purple)}
+.comp-kpi-label{font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px}
+.comp-kpi-vals{display:flex;gap:12px;align-items:flex-end}
+.comp-kpi-val-a{font-size:24px;font-weight:800;color:var(--blue)}
+.comp-kpi-val-b{font-size:24px;font-weight:800;color:var(--purple)}
+.comp-kpi-arrow{font-size:14px;color:var(--text3);align-self:center}
+.comp-change-good{color:var(--green);font-weight:700}
+.comp-change-bad{color:var(--red);font-weight:700}
+.comp-change-neu{color:var(--text3)}
+
 /* Gestión */
 .gestion-info{margin-top:12px;padding:12px 14px;background:var(--blue-l);border-radius:var(--r-sm);font-size:12px;color:var(--text2)}
 
@@ -261,6 +273,7 @@ input[type=file]{display:none}
   <div class="nav-tab" onclick="showView('productos',this)">📈 Productos</div>
   <div class="nav-tab" onclick="showView('rankings',this)">🏆 Rankings</div>
   <div class="nav-tab" onclick="showView('gestion',this)">⚙️ Quincenas</div>
+  <div class="nav-tab" onclick="showView('comparar',this)">🔀 Comparar</div>
 </div>
 
 <div class="wrapper">
@@ -454,6 +467,53 @@ input[type=file]{display:none}
   </div>
 </div>
 
+  <!-- ── VISTA COMPARAR ── -->
+  <div class="view" id="view-comparar">
+    <div class="card card-full" id="compararCard">
+      <div class="card-title">Comparar dos inventarios</div>
+      <div id="compararEmpty" class="empty"><div class="empty-icon">🔀</div><div>Conectá el Apps Script para ver las quincenas disponibles</div></div>
+      <div id="compararSelector" style="display:none">
+        <div style="display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap;margin-bottom:24px">
+          <div>
+            <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Quincena A</div>
+            <select id="selectA" style="padding:8px 12px;border-radius:var(--r-sm);border:1.5px solid var(--border);font-size:13px;color:var(--text);background:var(--surface);min-width:160px"></select>
+          </div>
+          <div style="font-size:20px;color:var(--text3);padding-bottom:8px">vs</div>
+          <div>
+            <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Quincena B</div>
+            <select id="selectB" style="padding:8px 12px;border-radius:var(--r-sm);border:1.5px solid var(--border);font-size:13px;color:var(--text);background:var(--surface);min-width:160px"></select>
+          </div>
+          <button class="btn btn-primary" onclick="ejecutarComparacion()">Comparar →</button>
+        </div>
+        <div id="compararResult" style="display:none">
+          <!-- KPIs comparación -->
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:24px" id="compararKpis"></div>
+          <!-- Gráfico lado a lado -->
+          <div class="grid2" style="margin-bottom:24px">
+            <div class="card">
+              <div class="card-title">Distribución por estado</div>
+              <div style="position:relative;height:220px"><canvas id="compBarChart"></canvas></div>
+            </div>
+            <div class="card">
+              <div class="card-title">Impacto económico</div>
+              <div style="position:relative;height:220px"><canvas id="compImpChart"></canvas></div>
+            </div>
+          </div>
+          <!-- Tabla productos que cambiaron -->
+          <div class="card card-full">
+            <div class="card-title">Productos que cambiaron de estado</div>
+            <div class="tbl-wrap">
+              <table class="atbl">
+                <thead><tr><th>Producto</th><th>Familia</th><th>Estado en A</th><th>Estado en B</th><th>% Desv. A</th><th>% Desv. B</th><th>Impacto A €</th><th>Impacto B €</th><th>Cambio</th></tr></thead>
+                <tbody id="compararTabla"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
 <!-- Panel lateral -->
 <div class="panel-overlay" id="panelOverlay" onclick="closePanel()"></div>
 <div class="panel" id="panel">
@@ -532,6 +592,7 @@ async function fetchHistorico(){
       historico=d;
       renderHistPreview();
       renderNavVisibility();
+      renderCompararSelector();
       if(currentData.length) renderAll();
       else renderHistOnly();
     }
@@ -1017,6 +1078,7 @@ function showView(id,tab){
   if(id==='productos') renderProductos();
   if(id==='rankings') renderRankings();
   if(id==='gestion') renderGestion();
+  if(id==='comparar') renderCompararSelector();
 }
 
 // ── Render all ────────────────────────────────────────────────
@@ -1089,6 +1151,147 @@ zone.addEventListener('dragover',e=>{e.preventDefault();zone.classList.add('drag
 zone.addEventListener('dragleave',()=>zone.classList.remove('drag'));
 zone.addEventListener('drop',e=>{e.preventDefault();zone.classList.remove('drag');if(e.dataTransfer.files[0])processFile(e.dataTransfer.files[0])});
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closePanel();});
+
+// ── Comparar quincenas ────────────────────────────────────────
+let compBarInst=null, compImpInst=null;
+
+function renderCompararSelector(){
+  const qs=historico.quincenas;
+  if(!qs||!qs.length){
+    document.getElementById('compararEmpty').style.display='block';
+    document.getElementById('compararSelector').style.display='none';
+    return;
+  }
+  document.getElementById('compararEmpty').style.display='none';
+  document.getElementById('compararSelector').style.display='block';
+  const sorted=[...qs].sort((a,b)=>new Date(b.fecha)-new Date(a.fecha));
+  const opts=sorted.map(q=>`<option value="${q.quincena}">${q.quincena}</option>`).join('');
+  document.getElementById('selectA').innerHTML=opts;
+  document.getElementById('selectB').innerHTML=opts;
+  // Default: A=penúltima, B=última
+  if(sorted.length>=2){
+    document.getElementById('selectA').value=sorted[1].quincena;
+    document.getElementById('selectB').value=sorted[0].quincena;
+  }
+}
+
+function ejecutarComparacion(){
+  const qA=document.getElementById('selectA').value;
+  const qB=document.getElementById('selectB').value;
+  if(qA===qB){showNotice('Elegí dos quincenas diferentes.','err');return;}
+
+  const prodsA=historico.productos.filter(p=>p.quincena===qA);
+  const prodsB=historico.productos.filter(p=>p.quincena===qB);
+  const metA=historico.quincenas.find(q=>q.quincena===qA);
+  const metB=historico.quincenas.find(q=>q.quincena===qB);
+
+  if(!prodsA.length||!prodsB.length){showNotice('No hay datos para una de las quincenas seleccionadas.','err');return;}
+
+  // KPIs
+  const elevA=parseInt(metA.elevada)||0, elevB=parseInt(metB.elevada)||0;
+  const leveA=parseInt(metA.leve)||0, leveB=parseInt(metB.leve)||0;
+  const coinA=parseInt(metA.coincide)||0, coinB=parseInt(metB.coincide)||0;
+  const impA=parseFloat(metA.impacto)||0, impB=parseFloat(metB.impacto)||0;
+  const totA=parseInt(metA.total)||1, totB=parseInt(metB.total)||1;
+  const accA=Math.round(coinA/totA*100), accB=Math.round(coinB/totB*100);
+
+  function kpiCard(label,valA,valB,unit,higherIsBad){
+    const diff=valB-valA;
+    const diffStr=diff===0?'Sin cambio':(diff>0?'+':'')+diff+(unit||'');
+    const cls=diff===0?'comp-change-neu':(higherIsBad?diff>0:diff<0)?'comp-change-bad':'comp-change-good';
+    return `<div class="kpi-card" style="border-top:none;border-left:4px solid var(--blue)">
+      <div class="comp-kpi-label">${label}</div>
+      <div class="comp-kpi-vals">
+        <div><div style="font-size:11px;color:var(--text3);margin-bottom:2px">${qA}</div><div class="comp-kpi-val-a">${valA}${unit||''}</div></div>
+        <div class="comp-kpi-arrow">→</div>
+        <div><div style="font-size:11px;color:var(--text3);margin-bottom:2px">${qB}</div><div class="comp-kpi-val-b">${valB}${unit||''}</div></div>
+      </div>
+      <div class="${cls}" style="font-size:12px;margin-top:8px">${diffStr}</div>
+    </div>`;
+  }
+
+  document.getElementById('compararKpis').innerHTML=
+    kpiCard('Precisión',accA+'%',accB+'%','',false)+
+    kpiCard('Desvíos elevados',elevA,elevB,'',true)+
+    kpiCard('Desvíos leves',leveA,leveB,'',true)+
+    kpiCard('Coinciden',coinA,coinB,'',false)+
+    kpiCard('Impacto €','€'+impA.toFixed(0),'€'+impB.toFixed(0),'',true);
+
+  // Gráfico barras lado a lado
+  const ctxBar=document.getElementById('compBarChart').getContext('2d');
+  if(compBarInst) compBarInst.destroy();
+  compBarInst=new Chart(ctxBar,{type:'bar',
+    data:{labels:['Elevada','Leve','Coincide'],datasets:[
+      {label:qA,data:[elevA,leveA,coinA],backgroundColor:['rgba(230,57,70,.7)','rgba(244,162,37,.7)','rgba(34,197,94,.7)'],borderRadius:4},
+      {label:qB,data:[elevB,leveB,coinB],backgroundColor:['rgba(230,57,70,.4)','rgba(244,162,37,.4)','rgba(34,197,94,.4)'],borderRadius:4,borderDash:[4,4]},
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{position:'bottom',labels:{font:{size:11},boxWidth:10}}},
+      scales:{x:{grid:{display:false},ticks:{color:'var(--text3)'}},y:{grid:{color:'var(--border)'},ticks:{color:'var(--text3)'},beginAtZero:true}}
+    }});
+
+  // Gráfico impacto por familia
+  const famA={}, famB={};
+  prodsA.forEach(p=>{ famA[p.familia]=(famA[p.familia]||0)+(parseFloat(p.impacto)||0); });
+  prodsB.forEach(p=>{ famB[p.familia]=(famB[p.familia]||0)+(parseFloat(p.impacto)||0); });
+  const fams=[...new Set([...Object.keys(famA),...Object.keys(famB)])].sort();
+  const ctxImp=document.getElementById('compImpChart').getContext('2d');
+  if(compImpInst) compImpInst.destroy();
+  compImpInst=new Chart(ctxImp,{type:'bar',
+    data:{labels:fams,datasets:[
+      {label:qA,data:fams.map(f=>famA[f]||0),backgroundColor:'rgba(24,119,242,.7)',borderRadius:4},
+      {label:qB,data:fams.map(f=>famB[f]||0),backgroundColor:'rgba(139,92,246,.7)',borderRadius:4},
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{position:'bottom',labels:{font:{size:11},boxWidth:10}}},
+      scales:{x:{grid:{display:false},ticks:{color:'var(--text3)',font:{size:10}}},y:{grid:{color:'var(--border)'},ticks:{color:'var(--text3)'},beginAtZero:true}}
+    }});
+
+  // Tabla productos que cambiaron de estado
+  const mapA={}, mapB={};
+  prodsA.forEach(p=>mapA[p.producto]=p);
+  prodsB.forEach(p=>mapB[p.producto]=p);
+  const allProds=[...new Set([...Object.keys(mapA),...Object.keys(mapB)])];
+
+  const rows=allProds.map(prod=>{
+    const a=mapA[prod], b=mapB[prod];
+    const estadoA=a?a.estado:'—', estadoB=b?b.estado:'—';
+    const pctA=a?(parseFloat(a.pct)*100).toFixed(1)+'%':'—';
+    const pctB=b?(parseFloat(b.pct)*100).toFixed(1)+'%':'—';
+    const impA2=a?'€'+(parseFloat(a.impacto)||0).toFixed(2):'—';
+    const impB2=b?'€'+(parseFloat(b.impacto)||0).toFixed(2):'—';
+    const cambiaron=estadoA!==estadoB;
+    let cambio='', cambioClass='comp-change-neu';
+    if(!a) { cambio='Nuevo ↑'; cambioClass='comp-change-bad'; }
+    else if(!b) { cambio='Eliminado'; cambioClass='comp-change-neu'; }
+    else if(estadoA==='ELEVADA'&&estadoB!=='ELEVADA') { cambio='Mejoró ✅'; cambioClass='comp-change-good'; }
+    else if(estadoA!=='ELEVADA'&&estadoB==='ELEVADA') { cambio='Empeoró 🔴'; cambioClass='comp-change-bad'; }
+    else if(estadoA==='LEVE'&&estadoB==='COINCIDE') { cambio='Mejoró ✅'; cambioClass='comp-change-good'; }
+    else if(estadoA==='COINCIDE'&&estadoB==='LEVE') { cambio='Empeoró 🟡'; cambioClass='comp-change-bad'; }
+    else { cambio='Sin cambio'; }
+
+    const pillA=estadoA==='ELEVADA'?'p-red':estadoA==='LEVE'?'p-amber':estadoA==='COINCIDE'?'p-green':'';
+    const pillB=estadoB==='ELEVADA'?'p-red':estadoB==='LEVE'?'p-amber':estadoB==='COINCIDE'?'p-green':'';
+    const fam=a?.familia||b?.familia||'—';
+
+    return {cambiaron, html:`<tr style="${cambiaron?'background:var(--blue-ll)':''}">
+      <td style="font-weight:600">${prod}</td>
+      <td>${fam}</td>
+      <td>${pillA?`<span class="pill ${pillA}">${estadoA}</span>`:estadoA}</td>
+      <td>${pillB?`<span class="pill ${pillB}">${estadoB}</span>`:estadoB}</td>
+      <td>${pctA}</td><td>${pctB}</td>
+      <td>${impA2}</td><td>${impB2}</td>
+      <td class="${cambioClass}" style="font-weight:700">${cambio}</td>
+    </tr>`};
+  });
+
+  // Primero los que cambiaron, después los que no
+  const sorted=[...rows.filter(r=>r.cambiaron),...rows.filter(r=>!r.cambiaron)];
+  document.getElementById('compararTabla').innerHTML=sorted.map(r=>r.html).join('')||
+    '<tr><td colspan="9" style="text-align:center;color:var(--text3);padding:1.5rem">Sin datos</td></tr>';
+
+  document.getElementById('compararResult').style.display='block';
+}
 
 // ── Helpers UI ────────────────────────────────────────────────
 function showNotice(msg,type='ok'){const n=document.getElementById('notice');n.textContent=msg;n.className='notice '+type;n.style.display='block';if(type!=='err')setTimeout(()=>n.style.display='none',4000);}
