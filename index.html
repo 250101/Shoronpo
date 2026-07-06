@@ -488,7 +488,7 @@ function jsonpCall(url){
     const cb='sh_'+Date.now()+'_'+Math.floor(Math.random()*99999);
     const s=document.createElement('script');
     const cleanup=()=>{try{delete window[cb];s.remove();}catch(e){}};
-    const t=setTimeout(()=>{cleanup();rej(new Error('Tiempo de espera agotado.'));},60000);
+    const t=setTimeout(()=>{cleanup();rej(new Error('Tiempo de espera agotado.'));},20000);
     window[cb]=(d)=>{clearTimeout(t);cleanup();res(d);};
     s.src=url+(url.includes('?')?'&':'?')+'callback='+cb;
     document.body.appendChild(s);
@@ -1098,19 +1098,21 @@ function hideLoading(){document.getElementById('loadingOverlay').classList.remov
 // ── Auto-conectar al iniciar ──────────────────────────────────
 (async()=>{
   if(APPS_SCRIPT_URL){
-    showLoading('Conectando con Google Sheets...');
+    document.getElementById('connDot').className='conn-dot loading';
+    // No bloquear la página — conectar en background sin loading overlay
     try{
       const d=await jsonpCall(APPS_SCRIPT_URL+'?action=ping');
       if(d.ok){
         document.getElementById('connDot').className='conn-dot ok';
+        showNotice('Conectado a Google Sheets. Cargando histórico...','inf');
         await fetchHistorico();
       } else {
         document.getElementById('connDot').className='conn-dot err';
+        showNotice('No se pudo conectar automáticamente. Hacé clic en Conectar.','err');
       }
     }catch(e){
       document.getElementById('connDot').className='conn-dot err';
-    }finally{
-      hideLoading();
+      showNotice('No se pudo conectar. Verificá tu conexión y hacé clic en Conectar.','err');
     }
   }
 })();
