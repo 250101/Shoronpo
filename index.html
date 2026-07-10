@@ -260,9 +260,10 @@ input[type=file]{display:none}
   </div>
   <div class="tb-right">
     <div class="tb-qbadge" id="qbadge"></div>
-    <div class="conn-dot" id="connDot"></div>
-    <input class="conn-input" type="text" id="apiUrl" placeholder="URL del Apps Script..." oninput="saveApiUrl()">
-    <button class="conn-btn" onclick="testConnection()">Conectar</button>
+    <div class="conn-dot" id="connDot" title="Estado de conexión con Google Sheets"></div>
+    <span id="connLabel" style="font-size:11px;color:rgba(255,255,255,.7)">Conectando...</span>
+    <input type="hidden" id="apiUrl">
+    <button class="conn-btn" onclick="retryConnection()" id="btnReconectar" style="display:none">↺ Reconectar</button>
   </div>
 </div>
 
@@ -556,9 +557,12 @@ function jsonpCall(url){
 }
 
 // ── Conexión ─────────────────────────────────────────────────
-function saveApiUrl(){
-  APPS_SCRIPT_URL=document.getElementById('apiUrl').value.trim().split('?')[0];
-  localStorage.setItem('shoronpo_api_url',APPS_SCRIPT_URL);
+function saveApiUrl(){ /* URL hardcodeada */ }
+
+async function retryConnection(){
+  document.getElementById('btnReconectar').style.display='none';
+  document.getElementById('connLabel').textContent='Reconectando...';
+  await testConnection();
 }
 
 async function testConnection(){
@@ -1299,26 +1303,8 @@ function showLoading(txt){document.getElementById('loadingText').textContent=txt
 function hideLoading(){document.getElementById('loadingOverlay').classList.remove('show');}
 
 // ── Auto-conectar al iniciar ──────────────────────────────────
-(async()=>{
-  if(APPS_SCRIPT_URL){
-    document.getElementById('connDot').className='conn-dot loading';
-    // No bloquear la página — conectar en background sin loading overlay
-    try{
-      const d=await jsonpCall(APPS_SCRIPT_URL+'?action=ping');
-      if(d.ok){
-        document.getElementById('connDot').className='conn-dot ok';
-        showNotice('Conectado a Google Sheets. Cargando histórico...','inf');
-        await fetchHistorico();
-      } else {
-        document.getElementById('connDot').className='conn-dot err';
-        showNotice('No se pudo conectar automáticamente. Hacé clic en Conectar.','err');
-      }
-    }catch(e){
-      document.getElementById('connDot').className='conn-dot err';
-      showNotice('No se pudo conectar. Verificá tu conexión y hacé clic en Conectar.','err');
-    }
-  }
-})();
+// Auto-conectar al iniciar
+testConnection();
 </script>
 </body>
 </html>
