@@ -242,7 +242,7 @@ input[type=file]{display:none}
 .loading-spinner{width:40px;height:40px;border:3px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:spin .8s linear infinite}
 .loading-text{font-size:14px;font-weight:600;color:var(--text2)}
 
-#semanaSelector option{background:#1259c3;color:#fff;}
+#semanaSelector option{background:#1259c3;color:#0d0d0d;}
 </style>
 </head>
 <body>
@@ -329,18 +329,18 @@ input[type=file]{display:none}
         <div class="recur-wrap" id="recurWrap"></div>
       </div>
       <div class="alerts-section" id="alertsSection" style="display:none">
-        <div class="section-title">⚡ Alertas automáticas <span id="alertCount"></span></div>
-        <div class="alerts-grid" id="alertsGrid"></div>
+        <div class="alerts-section-title">⚡ Alertas activas <span id="alertCount"></span></div>
+        <div class="alerts-strip" id="alertsGrid"></div>
       </div>
-      <div class="grid2">
-        <div class="card" id="treemapCard" style="display:none">
-          <div class="card-title">Impacto € por familia</div>
-          <div class="treemap" id="treemapChart"></div>
-        </div>
-        <div class="card" id="scatterCard" style="display:none">
-          <div class="card-title">Riesgo: % desviación vs impacto €</div>
-          <div style="position:relative;height:200px"><canvas id="scatterChart"></canvas></div>
-        </div>
+      <!-- Top 5 productos críticos -->
+      <div class="card card-full" id="top5Card" style="display:none;margin-bottom:24px">
+        <div class="card-title">Productos que requieren atención inmediata</div>
+        <div id="top5Content"></div>
+      </div>
+      <!-- Treemap y scatter ocultos -->
+      <div style="display:none">
+        <div id="treemapCard"><div class="treemap" id="treemapChart"></div></div>
+        <div id="scatterCard"><canvas id="scatterChart"></canvas></div>
       </div>
       <div class="card card-full" id="histCard" style="display:none">
         <div class="card-title">Evolución histórica por semana <span style="font-weight:400">orden cronológico</span></div>
@@ -651,7 +651,7 @@ function renderHistOnly(){
   histOnlyInst=new Chart(ctx,{
     type:'bar',
     data:{
-      labels:sorted.map(q=>q.semana),
+      labels:sorted.map(q=>q.quincena),
       datasets:[
         {label:'Elevada',data:sorted.map(q=>parseInt(q.elevada)||0),backgroundColor:'rgba(230,57,70,.8)',borderRadius:4,stack:'s'},
         {label:'Leve',data:sorted.map(q=>parseInt(q.leve)||0),backgroundColor:'rgba(244,162,37,.8)',borderRadius:4,stack:'s'},
@@ -712,6 +712,7 @@ function resetDashboard(){
   document.getElementById('execOnlyHist').style.display='none';
   document.getElementById('qbadge').style.display='none';
   document.getElementById('qbadge').textContent='';
+  if(document.getElementById('top5Card')) document.getElementById('top5Card').style.display='none';
   document.getElementById('qCard').style.display='none';
   document.getElementById('qCharts').style.display='none';
   document.getElementById('qEmpty').style.display='block';
@@ -858,27 +859,33 @@ function renderAlertas(data){
   const alerts=[];
   const prodHist={};
   historico.productos.forEach(p=>{if(!prodHist[p.producto])prodHist[p.producto]=[];prodHist[p.producto].push(p);});
+  // Solo alertar productos que SIGUEN con desvío elevado ahora
+  const elevadosActuales=new Set(data.filter(d=>d.estado==='ELEVADA').map(d=>d.producto));
   Object.entries(prodHist).forEach(([prod,hist])=>{
+    if(!elevadosActuales.has(prod)) return;
     const elevadas=hist.filter(h=>h.estado==='ELEVADA').length;
-    if(elevadas>=2) alerts.push({type:'critical',icon:'🚨',title:`${prod} lleva ${elevadas} inventarios con desvío elevado`,text:'Requiere investigación.'});
+    if(elevadas>=2) alerts.push({type:'critical',icon:'🚨',label:`${prod} (${elevadas}x)`,tooltip:`Lleva ${elevadas} inventarios con desvío elevado. Requiere investigación urgente.`});
   });
   const acc=Math.round(data.filter(d=>d.estado==='COINCIDE').length/data.length*100);
-  if(acc<60) alerts.push({type:'critical',icon:'⚠️',title:`Precisión crítica: ${acc}%`,text:'Menos del 60% de productos coinciden.'});
-  else if(acc>=85) alerts.push({type:'good',icon:'✅',title:`Buena precisión: ${acc}%`,text:'La mayoría de productos están dentro del rango.'});
+  if(acc<60) alerts.push({type:'critical',icon:'⚠️',label:`Precisión: ${acc}%`,tooltip:'Menos del 60% de los productos coinciden con el stock teórico.'});
+  else if(acc>=85) alerts.push({type:'good',icon:'✅',label:`Precisión: ${acc}%`,tooltip:'La mayoría de los productos están dentro del rango aceptable.'});
   const famImp={};
   data.forEach(d=>{if(d.estado!=='COINCIDE') famImp[d.familia]=(famImp[d.familia]||0)+d.impacto;});
   const topFam=Object.entries(famImp).sort((a,b)=>b[1]-a[1])[0];
-  if(topFam) alerts.push({type:'warn',icon:'📦',title:`${topFam[0]} concentra el mayor impacto`,text:`€ ${topFam[1].toFixed(0)} en desvíos.`});
+  if(topFam&&topFam[1]>0) alerts.push({type:'warn',icon:'📦',label:topFam[0],tooltip:`Mayor impacto: €${topFam[1].toFixed(0)} en desvíos esta semana.`});
   if(historico.quincenas.length>0){
-    const prevQ=[...historico.quincenas].sort((a,b)=>new Date(b.fecha)-new Date(a.fecha))[0];
-    const curImp=data.reduce((s,d)=>s+(d.estado!=='COINCIDE'?d.impacto:0),0);
-    const prevImp=parseFloat(prevQ.impacto)||0;
-    const pctDiff=prevImp>0?Math.round(((curImp-prevImp)/prevImp)*100):0;
-    if(curImp>prevImp&&pctDiff>10) alerts.push({type:'warn',icon:'📈',title:`Impacto económico subió ${pctDiff}%`,text:`De €${prevImp.toFixed(0)} a €${curImp.toFixed(0)}.`});
-    else if(curImp<prevImp) alerts.push({type:'good',icon:'📉',title:`Impacto económico bajó ${Math.abs(pctDiff)}%`,text:`De €${prevImp.toFixed(0)} a €${curImp.toFixed(0)}.`});
+    const sortedQ=[...historico.quincenas].sort((a,b)=>new Date(b.fecha)-new Date(a.fecha));
+    const prevQ=sortedQ.length>1?sortedQ[1]:null;
+    if(prevQ){
+      const curImp=data.reduce((s,d)=>s+(d.estado!=='COINCIDE'?d.impacto:0),0);
+      const prevImp=parseFloat(prevQ.impacto)||0;
+      const pctDiff=prevImp>0?Math.round(((curImp-prevImp)/prevImp)*100):0;
+      if(curImp>prevImp&&pctDiff>10) alerts.push({type:'warn',icon:'📈',label:`Impacto +${pctDiff}%`,tooltip:`El impacto subió ${pctDiff}% vs ${prevQ.quincena}. De €${prevImp.toFixed(0)} a €${curImp.toFixed(0)}.`});
+      else if(curImp<prevImp) alerts.push({type:'good',icon:'📉',label:`Impacto -${Math.abs(pctDiff)}%`,tooltip:`El impacto bajó vs ${prevQ.quincena}. De €${prevImp.toFixed(0)} a €${curImp.toFixed(0)}.`});
+    }
   }
-  if(!alerts.length) alerts.push({type:'good',icon:'🎉',title:'Todo bajo control',text:'No se detectaron alertas críticas.'});
-  document.getElementById('alertsGrid').innerHTML=alerts.map(a=>`<div class="alert-item ${a.type}"><div class="alert-icon">${a.icon}</div><div class="alert-text"><strong>${a.title}</strong>${a.text}</div></div>`).join('');
+  if(!alerts.length) alerts.push({type:'good',icon:'🎉',label:'Todo bajo control',tooltip:'No se detectaron alertas críticas en este inventario.'});
+  document.getElementById('alertsGrid').innerHTML=alerts.map(a=>`<div class="alert-badge ${a.type}">${a.icon} ${a.label}<div class="alert-tooltip">${a.tooltip}</div></div>`).join('');
   document.getElementById('alertCount').textContent=`(${alerts.length})`;
   document.getElementById('alertsSection').style.display='block';
 }
@@ -918,7 +925,7 @@ function renderHistChart(){
   const ctx=document.getElementById('histChart').getContext('2d');
   if(histInst) histInst.destroy();
   histInst=new Chart(ctx,{type:'bar',data:{
-    labels:sorted.map(q=>q.semana),
+    labels:sorted.map(q=>q.quincena),
     datasets:[
       {label:'Elevada',data:sorted.map(q=>parseInt(q.elevada)||0),backgroundColor:'rgba(230,57,70,.8)',borderRadius:4,stack:'s'},
       {label:'Leve',data:sorted.map(q=>parseInt(q.leve)||0),backgroundColor:'rgba(244,162,37,.8)',borderRadius:4,stack:'s'},
@@ -985,9 +992,9 @@ function renderRankings(){
   if(!allProds.length){document.getElementById('rankEmpty').style.display='block';document.getElementById('rankCards').style.display='none';return;}
   document.getElementById('rankEmpty').style.display='none';document.getElementById('rankCards').style.display='grid';
   const map={};
-  allProds.forEach(p=>{if(!map[p.producto])map[p.producto]={producto:p.producto,familia:p.familia,registros:[],impTotal:0,elevadas:0,semanas:new Set()};
+  allProds.forEach(p=>{if(!map[p.producto])map[p.producto]={producto:p.producto,familia:p.familia,registros:[],impTotal:0,elevadas:0,quincenas:new Set()};
     map[p.producto].registros.push(p);map[p.producto].impTotal+=(parseFloat(p.impacto)||0);
-    if(p.estado==='ELEVADA')map[p.producto].elevadas++;map[p.producto].semanas.add(p.semana);});
+    if(p.estado==='ELEVADA')map[p.producto].elevadas++;map[p.producto].quincenas.add(p.quincena);});
   const prods=Object.values(map);
   const totalQ=historico.quincenas.length;
 
@@ -995,7 +1002,7 @@ function renderRankings(){
     <td style="font-weight:600;cursor:pointer;color:var(--blue)" onclick="openPanel('${p.producto.replace(/'/g,"\\'")}') ">${p.producto}</td>
     <td>${val}</td><td>${extra}</td></tr>`;
 
-  document.getElementById('rankImpactoBody').innerHTML=[...prods].sort((a,b)=>b.impTotal-a.impTotal).slice(0,8).map((p,i)=>row(p,i,`€${p.impTotal.toFixed(0)}`,p.semanas.size)).join('');
+  document.getElementById('rankImpactoBody').innerHTML=[...prods].sort((a,b)=>b.impTotal-a.impTotal).slice(0,8).map((p,i)=>row(p,i,`€${p.impTotal.toFixed(0)}`,p.quincenas.size)).join('');
   document.getElementById('rankRecurBody').innerHTML=[...prods].filter(p=>p.elevadas>0).sort((a,b)=>b.elevadas-a.elevadas).slice(0,8).map((p,i)=>row(p,i,`<span class="pill p-red">${p.elevadas}</span>`,Math.round(p.elevadas/totalQ*100)+'%')).join('');
 
   const byTend=[...prods].filter(p=>p.registros.length>=2).map(p=>{
@@ -1006,8 +1013,8 @@ function renderRankings(){
   }).sort((a,b)=>b.delta-a.delta).slice(0,8);
   document.getElementById('rankPeorBody').innerHTML=byTend.map((p,i)=>row(p,i,`<span style="color:var(--red);font-weight:700">↑${(p.delta*100).toFixed(1)}%</span>`,`${(p.lastPct*100).toFixed(1)}%`)).join('');
 
-  const byStable=[...prods].filter(p=>p.semanas.size>=2).map(p=>({...p,acc:Math.round(p.registros.filter(r=>r.estado==='COINCIDE').length/p.registros.length*100)})).sort((a,b)=>b.acc-a.acc).slice(0,8);
-  document.getElementById('rankEstableBody').innerHTML=byStable.map((p,i)=>row(p,i,`<span class="pill p-green">${p.acc}%</span>`,p.semanas.size)).join('');
+  const byStable=[...prods].filter(p=>p.quincenas.size>=2).map(p=>({...p,acc:Math.round(p.registros.filter(r=>r.estado==='COINCIDE').length/p.registros.length*100)})).sort((a,b)=>b.acc-a.acc).slice(0,8);
+  document.getElementById('rankEstableBody').innerHTML=byStable.map((p,i)=>row(p,i,`<span class="pill p-green">${p.acc}%</span>`,p.quincenas.size)).join('');
 }
 
 // ── Evolución productos ───────────────────────────────────────
@@ -1017,7 +1024,7 @@ function renderProductos(){
   document.getElementById('prodEmpty').style.display='none';document.getElementById('prodCard').style.display='block';
   const map={};
   allProds.forEach(p=>{if(!map[p.producto])map[p.producto]={producto:p.producto,familia:p.familia,registros:[]};
-    map[p.producto].registros.push({semana:p.semana,fecha:p.fecha,pct:parseFloat(p.pct)||0,impacto:parseFloat(p.impacto)||0,estado:p.estado});});
+    map[p.producto].registros.push({quincena:p.quincena,fecha:p.fecha,pct:parseFloat(p.pct)||0,impacto:parseFloat(p.impacto)||0,estado:p.estado});});
   renderProdTable(Object.values(map));
 }
 
@@ -1046,7 +1053,7 @@ function openPanel(nombre){
   const cur=currentData.find(d=>d.producto===nombre);
   document.getElementById('panelName').textContent=nombre;
   document.getElementById('panelFamilia').textContent=hist[0]?.familia||cur?.familia||'—';
-  const allRegs=[...hist.map(p=>({semana:p.semana,fecha:p.fecha,pct:parseFloat(p.pct)||0,impacto:parseFloat(p.impacto)||0,estado:p.estado}))];
+  const allRegs=[...hist.map(p=>({quincena:p.quincena,fecha:p.fecha,pct:parseFloat(p.pct)||0,impacto:parseFloat(p.impacto)||0,estado:p.estado}))];
   const sorted=[...allRegs].sort((a,b)=>new Date(a.fecha||0)-new Date(b.fecha||0));
   const elevadas=allRegs.filter(r=>r.estado==='ELEVADA').length;
   const impAcum=allRegs.reduce((s,r)=>s+r.impacto,0);
@@ -1059,7 +1066,7 @@ function openPanel(nombre){
   const ctx=document.getElementById('panelChart').getContext('2d');
   if(panelChartInst) panelChartInst.destroy();
   panelChartInst=new Chart(ctx,{type:'line',data:{
-    labels:sorted.map(r=>r.semana),
+    labels:sorted.map(r=>r.quincena),
     datasets:[{label:'% Desviación',data:sorted.map(r=>parseFloat((r.pct*100).toFixed(2))),
       borderColor:'var(--blue)',backgroundColor:'rgba(24,119,242,.1)',fill:true,tension:.4,pointRadius:5,pointHoverRadius:8,
       pointBackgroundColor:sorted.map(r=>r.estado==='ELEVADA'?'#e63946':r.estado==='LEVE'?'#f4a225':'#22c55e')}]},
@@ -1070,7 +1077,7 @@ function openPanel(nombre){
   document.getElementById('panelBody').innerHTML=[...sorted].reverse().map(r=>{
     const pill=r.estado==='ELEVADA'?'p-red':r.estado==='LEVE'?'p-amber':'p-green';
     const lab=r.estado==='ELEVADA'?'Elevada':r.estado==='LEVE'?'Leve':'Coincide';
-    return `<tr><td>${r.semana}</td><td>${(r.pct>=0?'+':'')+(r.pct*100).toFixed(1)}%</td><td>€${r.impacto.toFixed(2)}</td><td><span class="pill ${pill}">${lab}</span></td></tr>`;
+    return `<tr><td>${r.quincena}</td><td>${(r.pct>=0?'+':'')+(r.pct*100).toFixed(1)}%</td><td>€${r.impacto.toFixed(2)}</td><td><span class="pill ${pill}">${lab}</span></td></tr>`;
   }).join('');
   document.getElementById('panelOverlay').style.display='block';
   document.getElementById('panel').style.display='block';
@@ -1081,7 +1088,7 @@ function closePanel(){document.getElementById('panelOverlay').style.display='non
 // ── Filtros ───────────────────────────────────────────────────
 function setFilter(f,btn){activeFilter=f;document.querySelectorAll('.fbtn').forEach(b=>b.className='fbtn');btn.classList.add(f==='all'?'f-all':f==='ELEVADA'?'f-red':f==='LEVE'?'f-amber':'f-green');renderDetail(currentData);}
 function searchDetail(v){searchTerm=v.toLowerCase();renderDetail(currentData);}
-function searchProductos(v){const map={};historico.productos.forEach(p=>{if(!map[p.producto])map[p.producto]={producto:p.producto,familia:p.familia,registros:[]};map[p.producto].registros.push({semana:p.semana,fecha:p.fecha,pct:parseFloat(p.pct)||0,impacto:parseFloat(p.impacto)||0,estado:p.estado});});renderProdTable(Object.values(map),v.toLowerCase());}
+function searchProductos(v){const map={};historico.productos.forEach(p=>{if(!map[p.producto])map[p.producto]={producto:p.producto,familia:p.familia,registros:[]};map[p.producto].registros.push({quincena:p.quincena,fecha:p.fecha,pct:parseFloat(p.pct)||0,impacto:parseFloat(p.impacto)||0,estado:p.estado});});renderProdTable(Object.values(map),v.toLowerCase());}
 function sortTable(col){if(sortCol===col)sortAsc=!sortAsc;else{sortCol=col;sortAsc=false;}renderDetail(currentData);}
 
 // ── Nav ───────────────────────────────────────────────────────
@@ -1097,6 +1104,39 @@ function showView(id,tab){
 }
 
 // ── Render all ────────────────────────────────────────────────
+function renderTop5(data){
+  const elevados=[...data].filter(d=>d.estado==='ELEVADA').sort((a,b)=>b.impacto-a.impacto).slice(0,5);
+  const leves=[...data].filter(d=>d.estado==='LEVE').sort((a,b)=>b.impacto-a.impacto);
+  const todos=[...elevados,...leves].slice(0,5);
+  if(!todos.length){document.getElementById('top5Card').style.display='none';return;}
+  const prodHist={};
+  historico.productos.forEach(p=>{if(!prodHist[p.producto])prodHist[p.producto]=0;if(p.estado==='ELEVADA')prodHist[p.producto]++;});
+  document.getElementById('top5Content').innerHTML=`
+    <table class="atbl">
+      <thead><tr>
+        <th>Producto</th><th>Familia</th><th>% Desviación</th>
+        <th>Impacto €</th><th>Estado</th><th>Recurrencia</th>
+      </tr></thead>
+      <tbody>${todos.map(d=>{
+        const pill=d.estado==='ELEVADA'?'p-red':'p-amber';
+        const lab=d.estado==='ELEVADA'?'Elevada':'Leve';
+        const veces=prodHist[d.producto]||0;
+        const recur=veces>=2?`<span class="pill p-red">🔁 ${veces}x</span>`:veces===1?`<span class="pill p-amber">1x</span>`:'<span style="color:var(--text3)">Nuevo</span>';
+        const pct=(d.pct>=0?'+':'')+(d.pct*100).toFixed(1)+'%';
+        return `<tr>
+          <td style="font-weight:700">${d.producto}</td>
+          <td>${d.familia}</td>
+          <td style="font-weight:700;color:${d.estado==='ELEVADA'?'var(--red)':'var(--amber)'}">${pct}</td>
+          <td style="font-weight:700">€${d.impacto.toFixed(2)}</td>
+          <td><span class="pill ${pill}">${lab}</span></td>
+          <td>${recur}</td>
+        </tr>`;
+      }).join('')}
+      </tbody>
+    </table>`;
+  document.getElementById('top5Card').style.display='block';
+}
+
 function renderAll(){
   if(!currentData.length) return;
   const data=currentData;
@@ -1106,6 +1146,7 @@ function renderAll(){
   renderKPIs(data);
   renderComparacion(data);
   renderAlertas(data);
+  renderTop5(data);
   renderTreemap(data);
   renderScatter(data);
   renderHistChart();
@@ -1221,8 +1262,8 @@ function renderCompararSelector(){
   document.getElementById('selectB').innerHTML=opts;
   // Default: A=penúltima, B=última
   if(sorted.length>=2){
-    document.getElementById('selectA').value=sorted[1].semana;
-    document.getElementById('selectB').value=sorted[0].semana;
+    document.getElementById('selectA').value=sorted[1].quincena;
+    document.getElementById('selectB').value=sorted[0].quincena;
   }
 }
 
