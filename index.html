@@ -797,11 +797,11 @@ function renderKPIs(data){
   const prevQ=sortedForKpi.length>1?sortedForKpi[1]:null;
 
   function trend(cur,prev,higherIsBad){
-    if(!prevQ) return '';
-    const d=cur-prev;
-    if(Math.abs(d)<0.5) return '<div class="kpi-trend neutral">= Sin cambio</div>';
+    if(!prevQ||prev===null||prev===undefined||isNaN(prev)||isNaN(cur)) return '';
+    const d=Math.round(cur-prev);
+    if(Math.abs(d)<1) return '<div class="kpi-trend neutral">= Sin cambio</div>';
     const cls=(higherIsBad?d>0:d<0)?'down-bad':'up-good';
-    return `<div class="kpi-trend ${cls}">${d>0?'↑':'↓'} ${Math.abs(d)}</div>`;
+    return `<div class="kpi-trend ${cls}">${d>0?'↑ +':'↓ '}${Math.abs(d)}</div>`;
   }
 
   document.getElementById('kpiGrid').innerHTML=`
@@ -809,7 +809,7 @@ function renderKPIs(data){
     <div class="kpi-card red"><div class="kpi-label">Desvío elevado</div><div class="kpi-val red">${elev}</div><div class="kpi-sub">+15% de diferencia</div>${prevQ?trend(elev,parseInt(prevQ.elevada),true):''}</div>
     <div class="kpi-card amber"><div class="kpi-label">Desvío leve</div><div class="kpi-val amber">${leve}</div><div class="kpi-sub">2–15% de diferencia</div>${prevQ?trend(leve,parseInt(prevQ.leve),true):''}</div>
     <div class="kpi-card green"><div class="kpi-label">Coinciden</div><div class="kpi-val green">${coin}</div><div class="kpi-sub">${acc}% del total</div>${prevQ?trend(coin,parseInt(prevQ.coincide),false):''}</div>
-    <div class="kpi-card purple"><div class="kpi-label">Impacto €</div><div class="kpi-val purple">€${imp.toFixed(0)}</div><div class="kpi-sub">en productos con desvío</div></div>
+    <div class="kpi-card purple"><div class="kpi-label">Impacto €</div><div class="kpi-val purple">€${imp.toFixed(0)}</div><div class="kpi-sub">en productos con desvío</div>${prevQ?trend(Math.round(imp),Math.round(parseFloat(prevQ.impacto)||0),true):''}</div>
   `;
 }
 
@@ -819,7 +819,7 @@ function renderComparacion(data){
   const sortedQ=[...historico.quincenas].sort((a,b)=>new Date(b.fecha)-new Date(a.fecha));
   // Usar el penúltimo inventario para comparar (el último es el recién cargado)
   const prevQ=sortedQ.length>1?sortedQ[1]:sortedQ[0];
-  const prevProds=historico.productos.filter(p=>p.quincena===prevQ.semana);
+  const prevProds=historico.productos.filter(p=>p.quincena===prevQ.quincena);
   const curElev=data.filter(d=>d.estado==='ELEVADA').length;
   const curCoin=data.filter(d=>d.estado==='COINCIDE').length;
   const curImp=data.reduce((s,d)=>s+(d.estado!=='COINCIDE'?d.impacto:0),0);
@@ -834,7 +834,7 @@ function renderComparacion(data){
     return `<div class="comp-delta ${cls}">${d>0?'↑ +':'↓ '}${eur?'€ '+Math.abs(d).toFixed(0):Math.abs(d)}</div>`;
   }
 
-  document.getElementById('compVs').innerHTML=`<span class="comp-badge">Actual</span><span style="opacity:.6;font-size:14px">→</span><span class="comp-badge" style="opacity:.7">vs ${prevQ.semana}</span>`;
+  document.getElementById('compVs').innerHTML=`<span class="comp-badge">Actual</span><span style="opacity:.6;font-size:14px">→</span><span class="comp-badge" style="opacity:.7">vs ${prevQ.quincena}</span>`;
   document.getElementById('compGrid').innerHTML=`
     <div class="comp-card"><div class="comp-card-label">Precisión</div><div class="comp-card-val">${curAcc}%</div>${delta(curAcc,prevAcc,false,false)}</div>
     <div class="comp-card"><div class="comp-card-label">Desvíos elevados</div><div class="comp-card-val">${curElev}</div>${delta(curElev,prevElev,true,false)}</div>
