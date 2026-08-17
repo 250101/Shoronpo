@@ -322,7 +322,7 @@ input[type=file]{display:none}
         <div class="kpi-grid" id="kpiGrid"></div>
       </div>
       <div class="comp-hero" id="compHero" style="display:none">
-        <div class="comp-title">Comparación con inventario anterior</div>
+        <div class="comp-title">Comparación con semana anterior</div>
         <div class="comp-vs" id="compVs"></div>
         <div class="comp-grid" id="compGrid"></div>
         <div class="comp-recur-title">Productos con desvío elevado</div>
@@ -1123,7 +1123,7 @@ function renderAll(){
 async function cerrarQuincena(){
   if(!currentData.length){showNotice('Primero cargá un export.','err');return;}
   if(!APPS_SCRIPT_URL){showNotice('Configurá la URL del Apps Script.','err');return;}
-  const q=prompt('Nombre de la semana (ej: Q1 Jul 2026):');
+  const q=prompt('Nombre de la semana (ej: S1 Jul 2026):');
   if(!q) return;
   if(!confirm(`¿Guardás la semana "${q}" en Google Sheets?`)) return;
   const btn=document.getElementById('btnCerrar');
