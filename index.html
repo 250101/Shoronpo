@@ -119,18 +119,16 @@ input[type=file]{display:none}
 .rtag-fixed{background:rgba(34,197,94,.25);color:#c0f4d0;border:1px solid rgba(34,197,94,.4)}
 
 /* Alertas */
-/* Alertas rediseñadas */
 .alerts-section{margin-bottom:24px}
-.alerts-strip{display:flex;gap:8px;flex-wrap:wrap;padding:12px 16px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--shadow)}
-.alert-badge{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:20px;font-size:12px;font-weight:600;cursor:default;transition:all .2s;position:relative}
-.alert-badge:hover .alert-tooltip{display:block}
-.alert-badge.critical{background:var(--red-bg);color:var(--red-text);border:1.5px solid var(--red-b)}
-.alert-badge.warn{background:var(--amber-bg);color:var(--amber-text);border:1.5px solid var(--amber-b)}
-.alert-badge.good{background:var(--green-bg);color:var(--green-text);border:1.5px solid var(--green-b)}
-.alert-badge.info{background:var(--blue-l);color:var(--blue-d);border:1.5px solid #b3ceff}
-.alert-tooltip{display:none;position:absolute;bottom:calc(100% + 8px);left:0;background:var(--text);color:#fff;font-size:11px;font-weight:400;padding:8px 12px;border-radius:var(--r-sm);width:220px;z-index:50;line-height:1.5;box-shadow:var(--shadow-md)}
-.alert-tooltip::after{content:'';position:absolute;top:100%;left:16px;border:5px solid transparent;border-top-color:var(--text)}
-.alerts-section-title{font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px}
+.alerts-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px}
+.alert-item{background:var(--surface);border-radius:var(--r-sm);padding:14px 16px;border:1px solid var(--border);display:flex;align-items:flex-start;gap:12px;box-shadow:var(--shadow)}
+.alert-item.critical{border-left:4px solid var(--red);background:var(--red-bg)}
+.alert-item.warn{border-left:4px solid var(--amber);background:var(--amber-bg)}
+.alert-item.good{border-left:4px solid var(--green);background:var(--green-bg)}
+.alert-item.info{border-left:4px solid var(--blue);background:var(--blue-l)}
+.alert-icon{font-size:20px;flex-shrink:0}
+.alert-text{font-size:12px;color:var(--text2);line-height:1.5}
+.alert-text strong{color:var(--text);display:block;margin-bottom:2px;font-size:13px}
 
 /* Cards */
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px}
@@ -243,6 +241,8 @@ input[type=file]{display:none}
 .loading-overlay.show{display:flex}
 .loading-spinner{width:40px;height:40px;border:3px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:spin .8s linear infinite}
 .loading-text{font-size:14px;font-weight:600;color:var(--text2)}
+
+#semanaSelector option{background:#1259c3;color:#fff;}
 </style>
 </head>
 <body>
@@ -261,10 +261,10 @@ input[type=file]{display:none}
     <div class="tb-sub">Inventario · Obrador Elaborados</div>
   </div>
   <div class="tb-right">
-    <div id="quincenavSelectorWrap" style="display:none;align-items:center;gap:8px">
+    <div id="semanaSelectWrap" style="display:none;align-items:center;gap:8px">
       <span style="font-size:11px;color:rgba(255,255,255,.7)">Viendo:</span>
-      <select id="quincenavSelector" onchange="cambiarQuincenaVista(this.value)"
-        style="font-size:12px;font-weight:600;padding:4px 10px;border-radius:6px;border:1px solid rgba(255,255,255,.3);background:rgba(255,255,255,.15);color:#fff;cursor:pointer;max-width:180px">
+      <select id="semanaSelector" onchange="cambiarSemanaVista(this.value)"
+        style="font-size:12px;font-weight:600;padding:4px 10px;border-radius:6px;border:1px solid rgba(255,255,255,.3);background:#1259c3;color:#fff;cursor:pointer;max-width:180px">
       </select>
     </div>
     <div class="conn-dot" id="connDot" title="Estado de conexión con Google Sheets"></div>
@@ -277,10 +277,10 @@ input[type=file]{display:none}
 <!-- Nav (se muestra al cargar datos) -->
 <div class="nav" id="mainNav">
   <div class="nav-tab active" onclick="showView('executive',this)">📊 Executive</div>
-  <div class="nav-tab" onclick="showView('quincena',this)">📋 Quincena</div>
+  <div class="nav-tab" onclick="showView('semana',this)">📋 Semana</div>
   <div class="nav-tab" onclick="showView('productos',this)">📈 Productos</div>
   <div class="nav-tab" onclick="showView('rankings',this)">🏆 Rankings</div>
-  <div class="nav-tab" onclick="showView('gestion',this)">⚙️ Quincenas</div>
+  <div class="nav-tab" onclick="showView('gestion',this)">⚙️ Semanas</div>
   <div class="nav-tab" onclick="showView('comparar',this)">🔀 Comparar</div>
 </div>
 
@@ -329,21 +329,21 @@ input[type=file]{display:none}
         <div class="recur-wrap" id="recurWrap"></div>
       </div>
       <div class="alerts-section" id="alertsSection" style="display:none">
-        <div class="alerts-section-title">⚡ Alertas activas <span id="alertCount"></span></div>
-        <div class="alerts-strip" id="alertsGrid"></div>
+        <div class="section-title">⚡ Alertas automáticas <span id="alertCount"></span></div>
+        <div class="alerts-grid" id="alertsGrid"></div>
       </div>
-      <!-- Top 5 productos críticos -->
-      <div class="card card-full" id="top5Card" style="display:none;margin-bottom:24px">
-        <div class="card-title">Productos que requieren atención inmediata</div>
-        <div id="top5Content"></div>
-      </div>
-      <!-- Treemap y scatter ocultos pero funcionales (se usan en análisis) -->
-      <div style="display:none">
-        <div id="treemapCard"><div class="treemap" id="treemapChart"></div></div>
-        <div id="scatterCard"><canvas id="scatterChart"></canvas></div>
+      <div class="grid2">
+        <div class="card" id="treemapCard" style="display:none">
+          <div class="card-title">Impacto € por familia</div>
+          <div class="treemap" id="treemapChart"></div>
+        </div>
+        <div class="card" id="scatterCard" style="display:none">
+          <div class="card-title">Riesgo: % desviación vs impacto €</div>
+          <div style="position:relative;height:200px"><canvas id="scatterChart"></canvas></div>
+        </div>
       </div>
       <div class="card card-full" id="histCard" style="display:none">
-        <div class="card-title">Evolución histórica por quincena <span style="font-weight:400">orden cronológico</span></div>
+        <div class="card-title">Evolución histórica por semana <span style="font-weight:400">orden cronológico</span></div>
         <div class="chart-wrap"><canvas id="histChart"></canvas></div>
       </div>
       <div class="actions" id="execActions">
@@ -353,11 +353,11 @@ input[type=file]{display:none}
         </div>
         <div>
           <div class="progress-bar" id="progressBar"><div class="progress-fill" id="progressFill"></div></div>
-          <button class="btn btn-primary" id="btnCerrar" onclick="cerrarQuincena()">✓ Cerrar quincena → Sheets</button>
+          <button class="btn btn-primary" id="btnCerrar" onclick="cerrarQuincena()">✓ Cerrar semana → Sheets</button>
         </div>
       </div>
     </div>
-    <!-- Estado: sólo histórico sin quincena cargada -->
+    <!-- Estado: sólo histórico sin semana cargada -->
     <div id="execOnlyHist" style="display:none">
       <div class="card card-full" id="histCardOnly" style="display:none">
         <div class="card-title">Evolución histórica <span style="font-weight:400">orden cronológico</span></div>
@@ -367,9 +367,9 @@ input[type=file]{display:none}
   </div>
 
   <!-- ── VISTA QUINCENA ── -->
-  <div class="view" id="view-quincena">
+  <div class="view" id="view-semana">
     <div class="card card-full" id="qCard" style="display:none">
-      <div class="card-title">Detalle de productos — quincena actual</div>
+      <div class="card-title">Detalle de productos — semana actual</div>
       <div class="filter-row">
         <button class="fbtn f-all" onclick="setFilter('all',this)">Todos</button>
         <button class="fbtn" onclick="setFilter('ELEVADA',this)">🔴 Elevada</button>
@@ -409,7 +409,7 @@ input[type=file]{display:none}
     </div>
     <div class="empty" id="qEmpty" style="display:none">
       <div class="empty-icon">📋</div>
-      <div>Subí un export para ver el detalle de la quincena actual</div>
+      <div>Subí un export para ver el detalle de la semana actual</div>
     </div>
   </div>
 
@@ -441,7 +441,7 @@ input[type=file]{display:none}
     <div class="grid2" id="rankCards" style="display:none">
       <div class="card">
         <div class="card-title">🔴 Top impacto económico acumulado</div>
-        <table class="atbl"><thead><tr><th>#</th><th>Producto</th><th>Impacto €</th><th>Quincenas</th></tr></thead><tbody id="rankImpactoBody"></tbody></table>
+        <table class="atbl"><thead><tr><th>#</th><th>Producto</th><th>Impacto €</th><th>Semanas</th></tr></thead><tbody id="rankImpactoBody"></tbody></table>
       </div>
       <div class="card">
         <div class="card-title">🔁 Productos más recurrentes</div>
@@ -453,7 +453,7 @@ input[type=file]{display:none}
       </div>
       <div class="card">
         <div class="card-title">✅ Más estables</div>
-        <table class="atbl"><thead><tr><th>#</th><th>Producto</th><th>Precisión</th><th>Quincenas</th></tr></thead><tbody id="rankEstableBody"></tbody></table>
+        <table class="atbl"><thead><tr><th>#</th><th>Producto</th><th>Precisión</th><th>Semanas</th></tr></thead><tbody id="rankEstableBody"></tbody></table>
       </div>
     </div>
     <div class="empty" id="rankEmpty">
@@ -465,11 +465,11 @@ input[type=file]{display:none}
   <!-- ── VISTA GESTIÓN ── -->
   <div class="view" id="view-gestion">
     <div class="card card-full">
-      <div class="card-title">Quincenas guardadas en Google Sheets
+      <div class="card-title">Semanas guardadas en Google Sheets
         <button class="conn-btn" style="background:var(--blue);border-color:var(--blue);color:#fff;font-size:11px;padding:5px 12px;border-radius:6px;cursor:pointer;border:none" onclick="fetchHistorico().then(()=>{renderGestion();showNotice('Histórico actualizado.','ok')})">↺ Actualizar</button>
       </div>
       <div id="gestionContent">
-        <div class="empty"><div class="empty-icon">⚙️</div><div>Conectá el Apps Script para ver las quincenas guardadas</div></div>
+        <div class="empty"><div class="empty-icon">⚙️</div><div>Conectá el Apps Script para ver las semanas guardadas</div></div>
       </div>
     </div>
   </div>
@@ -479,16 +479,16 @@ input[type=file]{display:none}
   <div class="view" id="view-comparar">
     <div class="card card-full" id="compararCard">
       <div class="card-title">Comparar dos inventarios</div>
-      <div id="compararEmpty" class="empty"><div class="empty-icon">🔀</div><div>Conectá el Apps Script para ver las quincenas disponibles</div></div>
+      <div id="compararEmpty" class="empty"><div class="empty-icon">🔀</div><div>Conectá el Apps Script para ver las semanas disponibles</div></div>
       <div id="compararSelector" style="display:none">
         <div style="display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap;margin-bottom:24px">
           <div>
-            <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Quincena A</div>
+            <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Semana A</div>
             <select id="selectA" style="padding:8px 12px;border-radius:var(--r-sm);border:1.5px solid var(--border);font-size:13px;color:var(--text);background:var(--surface);min-width:160px"></select>
           </div>
           <div style="font-size:20px;color:var(--text3);padding-bottom:8px">vs</div>
           <div>
-            <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Quincena B</div>
+            <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Semana B</div>
             <select id="selectB" style="padding:8px 12px;border-radius:var(--r-sm);border:1.5px solid var(--border);font-size:13px;color:var(--text);background:var(--surface);min-width:160px"></select>
           </div>
           <button class="btn btn-primary" onclick="ejecutarComparacion()">Comparar →</button>
@@ -535,7 +535,7 @@ input[type=file]{display:none}
     <div class="panel-hist-title">Historial de desvíos (cronológico)</div>
     <div class="panel-chart-wrap"><canvas id="panelChart"></canvas></div>
     <table class="panel-hist-table">
-      <thead><tr><th>Quincena</th><th>% Desv.</th><th>Impacto €</th><th>Estado</th></tr></thead>
+      <thead><tr><th>Semana</th><th>% Desv.</th><th>Impacto €</th><th>Estado</th></tr></thead>
       <tbody id="panelBody"></tbody>
     </table>
   </div>
@@ -544,7 +544,7 @@ input[type=file]{display:none}
 <script>
 // ── Estado global ────────────────────────────────────────────
 let APPS_SCRIPT_URL = localStorage.getItem('shoronpo_api_url')||'https://script.google.com/macros/s/AKfycbyecasXGaMuY_TZJkNdjvoTFp7ORd7ynfsJYUeGYpj-K_R2zatwYZRSJjDNnC_JX7In/exec';
-let currentData=[], historico={quincenas:[],productos:[]};
+let currentData=[], historico={semanas:[],productos:[]};
 let activeFilter='all', sortCol='impacto', sortAsc=false, searchTerm='';
 let gaugeInst=null, histInst=null, histOnlyInst=null, scatterInst=null, panelChartInst=null;
 
@@ -604,88 +604,54 @@ async function fetchHistorico(){
       renderHistPreview();
       renderNavVisibility();
       renderCompararSelector();
-      actualizarSelectorQuincena();
+      actualizarSelectorSemana();
       if(currentData.length){
         renderAll();
       } else {
-        // Cargar automáticamente el último inventario guardado
-        cargarUltimaQuincena();
+        cargarUltimaSemana();
       }
     }
   }catch(e){console.warn('fetchHistorico:',e);}
 }
 
-function actualizarSelectorQuincena(){
-  const qs=historico.quincenas;
-  if(!qs||!qs.length) return;
-  const sorted=[...qs].sort((a,b)=>new Date(b.fecha)-new Date(a.fecha));
-  const sel=document.getElementById('quincenavSelector');
-  sel.innerHTML=sorted.map(q=>`<option value="${q.quincena}">${q.quincena}</option>`).join('');
-  const wrap=document.getElementById('quincenavSelectorWrap');
-  wrap.style.display='flex';
-}
-
-function cambiarQuincenaVista(quincena){
-  const prods=historico.productos.filter(p=>p.quincena===quincena);
-  if(!prods.length){showNotice('No hay datos para esta quincena.','err');return;}
-  // Convertir registros históricos al formato de currentData
-  currentData=prods.map(p=>({
-    familia:p.familia, producto:p.producto, unidad:p.unidad||'',
-    cantTeo:parseFloat(p.cantTeo)||0, cantReal:parseFloat(p.cantReal)||0,
-    desv:parseFloat(p.desv)||0, pct:parseFloat(p.pct)||0,
-    costeTeo:parseFloat(p.costeTeo)||0, costeReal:parseFloat(p.costeReal)||0,
-    impacto:parseFloat(p.impacto)||0, estado:p.estado||getEstado(parseFloat(p.pct)||0)
-  }));
-  document.getElementById('landingSection').style.display='none';
-  renderAll();
-  showNotice(`Viendo quincena: ${quincena}`,'inf');
-}
-
-function cargarUltimaQuincena(){
-  const qs=historico.quincenas;
-  if(!qs||!qs.length) return;
-  const sorted=[...qs].sort((a,b)=>new Date(b.fecha)-new Date(a.fecha));
-  cambiarQuincenaVista(sorted[0].quincena);
-}
-
 // ── Historial preview en landing ─────────────────────────────
 function renderHistPreview(){
-  const qs=historico.quincenas;
+  const qs=historico.semanas;
   const el=document.getElementById('histPreviewContent');
   const cnt=document.getElementById('histPreviewCount');
   if(!qs||!qs.length){
-    el.innerHTML='<div class="hist-preview-empty">No hay quincenas guardadas todavía</div>';
+    el.innerHTML='<div class="hist-preview-empty">No hay semanas guardadas todavía</div>';
     cnt.textContent='';
     return;
   }
   const sorted=[...qs].sort((a,b)=>new Date(b.fecha)-new Date(a.fecha));
-  cnt.textContent=`(${sorted.length} quincena${sorted.length!==1?'s':''})`;
+  cnt.textContent=`(${sorted.length} semana${sorted.length!==1?'s':''})`;
   el.innerHTML=`<table class="atbl">
-    <thead><tr><th>Quincena</th><th>Total</th><th>Elevada</th><th>Coincide</th><th>€</th></tr></thead>
+    <thead><tr><th>Semana</th><th>Total</th><th>Elevada</th><th>Coincide</th><th>€</th></tr></thead>
     <tbody>${sorted.slice(0,6).map(q=>`
       <tr>
-        <td style="font-weight:700">${q.quincena}</td>
+        <td style="font-weight:700">${q.semana}</td>
         <td>${q.total}</td>
         <td><span class="pill p-red">${q.elevada}</span></td>
         <td><span class="pill p-green">${q.coincide}</span></td>
         <td style="font-weight:600">€${parseFloat(q.impacto||0).toFixed(0)}</td>
       </tr>`).join('')}
     </tbody>
-  </table>${sorted.length>6?`<div style="font-size:11px;color:var(--text3);margin-top:8px;text-align:center">+${sorted.length-6} más — ir a ⚙️ Quincenas</div>`:''}`;
+  </table>${sorted.length>6?`<div style="font-size:11px;color:var(--text3);margin-top:8px;text-align:center">+${sorted.length-6} más — ir a ⚙️ Semanas</div>`:''}`;
 }
 
-// ── Mostrar histórico solo (sin quincena cargada) ─────────────
+// ── Mostrar histórico solo (sin semana cargada) ─────────────
 function renderHistOnly(){
-  if(!historico.quincenas||!historico.quincenas.length) return;
+  if(!historico.semanas||!historico.semanas.length) return;
   document.getElementById('mainNav').style.display='flex';
   document.getElementById('execOnlyHist').style.display='block';
-  const sorted=[...historico.quincenas].sort((a,b)=>new Date(a.fecha)-new Date(b.fecha));
+  const sorted=[...historico.semanas].sort((a,b)=>new Date(a.fecha)-new Date(b.fecha));
   const ctx=document.getElementById('histChartOnly').getContext('2d');
   if(histOnlyInst) histOnlyInst.destroy();
   histOnlyInst=new Chart(ctx,{
     type:'bar',
     data:{
-      labels:sorted.map(q=>q.quincena),
+      labels:sorted.map(q=>q.semana),
       datasets:[
         {label:'Elevada',data:sorted.map(q=>parseInt(q.elevada)||0),backgroundColor:'rgba(230,57,70,.8)',borderRadius:4,stack:'s'},
         {label:'Leve',data:sorted.map(q=>parseInt(q.leve)||0),backgroundColor:'rgba(244,162,37,.8)',borderRadius:4,stack:'s'},
@@ -702,26 +668,26 @@ function renderHistOnly(){
 }
 
 function renderNavVisibility(){
-  if(historico.quincenas&&historico.quincenas.length>0){
+  if(historico.semanas&&historico.semanas.length>0){
     document.getElementById('mainNav').style.display='flex';
   }
 }
 
-// ── Gestión de quincenas ──────────────────────────────────────
+// ── Gestión de semanas ──────────────────────────────────────
 function renderGestion(){
   const el=document.getElementById('gestionContent');
-  const qs=historico.quincenas;
+  const qs=historico.semanas;
   if(!qs||!qs.length){
-    el.innerHTML='<div class="empty"><div class="empty-icon">📭</div><div>No hay quincenas guardadas todavía</div></div>';
+    el.innerHTML='<div class="empty"><div class="empty-icon">📭</div><div>No hay semanas guardadas todavía</div></div>';
     return;
   }
   const sorted=[...qs].sort((a,b)=>new Date(b.fecha)-new Date(a.fecha));
   el.innerHTML=`
     <table class="atbl">
-      <thead><tr><th>Quincena</th><th>Fecha guardado</th><th>Total prods.</th><th>🟢 Coincide</th><th>🟡 Leve</th><th>🔴 Elevada</th><th>Impacto €</th></tr></thead>
+      <thead><tr><th>Semana</th><th>Fecha guardado</th><th>Total prods.</th><th>🟢 Coincide</th><th>🟡 Leve</th><th>🔴 Elevada</th><th>Impacto €</th></tr></thead>
       <tbody>${sorted.map(q=>`
         <tr>
-          <td style="font-weight:700">${q.quincena}</td>
+          <td style="font-weight:700">${q.semana}</td>
           <td style="color:var(--text3)">${q.fecha?new Date(q.fecha).toLocaleDateString('es-AR',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}):'-'}</td>
           <td>${q.total}</td>
           <td><span class="pill p-green">${q.coincide}</span></td>
@@ -732,7 +698,7 @@ function renderGestion(){
       </tbody>
     </table>
     <div class="gestion-info">
-      <strong>Para eliminar una quincena:</strong> abrí Google Sheets → pestaña <em>Quincenas</em> y borrá la fila correspondiente. También borrá los productos en la pestaña <em>Historico</em>. Luego hacé clic en ↺ Actualizar.
+      <strong>Para eliminar una semana:</strong> abrí Google Sheets → pestaña <em>Semanas</em> y borrá la fila correspondiente. También borrá los productos en la pestaña <em>Historico</em>. Luego hacé clic en ↺ Actualizar.
     </div>`;
 }
 
@@ -746,7 +712,6 @@ function resetDashboard(){
   document.getElementById('execOnlyHist').style.display='none';
   document.getElementById('qbadge').style.display='none';
   document.getElementById('qbadge').textContent='';
-  document.getElementById('top5Card').style.display='none';
   document.getElementById('qCard').style.display='none';
   document.getElementById('qCharts').style.display='none';
   document.getElementById('qEmpty').style.display='block';
@@ -755,7 +720,7 @@ function resetDashboard(){
   document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
   document.querySelector('.nav-tab').classList.add('active');
   renderHistPreview();
-  if(historico.quincenas&&historico.quincenas.length) renderHistOnly();
+  if(historico.semanas&&historico.semanas.length) renderHistOnly();
   showNotice('Inventario limpiado. El histórico sigue disponible.','inf');
 }
 
@@ -827,8 +792,8 @@ function renderKPIs(data){
   const leve=data.filter(d=>d.estado==='LEVE').length,elev=data.filter(d=>d.estado==='ELEVADA').length;
   const imp=data.reduce((s,d)=>s+(d.estado!=='COINCIDE'?d.impacto:0),0);
   const acc=Math.round(coin/tot*100);
-  // Penúltima quincena para comparar tendencias
-  const sortedForKpi=[...historico.quincenas].sort((a,b)=>new Date(b.fecha)-new Date(a.fecha));
+  // Penúltima semana para comparar tendencias
+  const sortedForKpi=[...historico.semanas].sort((a,b)=>new Date(b.fecha)-new Date(a.fecha));
   const prevQ=sortedForKpi.length>1?sortedForKpi[1]:null;
 
   function trend(cur,prev,higherIsBad){
@@ -850,11 +815,11 @@ function renderKPIs(data){
 
 // ── Comparación ───────────────────────────────────────────────
 function renderComparacion(data){
-  if(!historico.quincenas||!historico.quincenas.length){document.getElementById('compHero').style.display='none';return;}
-  const sortedQ=[...historico.quincenas].sort((a,b)=>new Date(b.fecha)-new Date(a.fecha));
+  if(!historico.semanas||!historico.semanas.length){document.getElementById('compHero').style.display='none';return;}
+  const sortedQ=[...historico.semanas].sort((a,b)=>new Date(b.fecha)-new Date(a.fecha));
   // Usar el penúltimo inventario para comparar (el último es el recién cargado)
   const prevQ=sortedQ.length>1?sortedQ[1]:sortedQ[0];
-  const prevProds=historico.productos.filter(p=>p.quincena===prevQ.quincena);
+  const prevProds=historico.productos.filter(p=>p.semana===prevQ.semana);
   const curElev=data.filter(d=>d.estado==='ELEVADA').length;
   const curCoin=data.filter(d=>d.estado==='COINCIDE').length;
   const curImp=data.reduce((s,d)=>s+(d.estado!=='COINCIDE'?d.impacto:0),0);
@@ -869,7 +834,7 @@ function renderComparacion(data){
     return `<div class="comp-delta ${cls}">${d>0?'↑ +':'↓ '}${eur?'€ '+Math.abs(d).toFixed(0):Math.abs(d)}</div>`;
   }
 
-  document.getElementById('compVs').innerHTML=`<span class="comp-badge">Actual</span><span style="opacity:.6;font-size:14px">→</span><span class="comp-badge" style="opacity:.7">vs ${prevQ.quincena}</span>`;
+  document.getElementById('compVs').innerHTML=`<span class="comp-badge">Actual</span><span style="opacity:.6;font-size:14px">→</span><span class="comp-badge" style="opacity:.7">vs ${prevQ.semana}</span>`;
   document.getElementById('compGrid').innerHTML=`
     <div class="comp-card"><div class="comp-card-label">Precisión</div><div class="comp-card-val">${curAcc}%</div>${delta(curAcc,prevAcc,false,false)}</div>
     <div class="comp-card"><div class="comp-card-label">Desvíos elevados</div><div class="comp-card-val">${curElev}</div>${delta(curElev,prevElev,true,false)}</div>
@@ -893,43 +858,27 @@ function renderAlertas(data){
   const alerts=[];
   const prodHist={};
   historico.productos.forEach(p=>{if(!prodHist[p.producto])prodHist[p.producto]=[];prodHist[p.producto].push(p);});
-
-  // Solo alertar productos que siguen con desvío elevado AHORA
-  const elevadosActuales=new Set(data.filter(d=>d.estado==='ELEVADA').map(d=>d.producto));
   Object.entries(prodHist).forEach(([prod,hist])=>{
-    if(!elevadosActuales.has(prod)) return; // Ya no tiene desvío, no alertar
     const elevadas=hist.filter(h=>h.estado==='ELEVADA').length;
-    if(elevadas>=2) alerts.push({type:'critical',icon:'🚨',label:`${prod} (${elevadas}x)`,tooltip:`Lleva ${elevadas} inventarios consecutivos con desvío elevado. Requiere investigación urgente.`});
+    if(elevadas>=2) alerts.push({type:'critical',icon:'🚨',title:`${prod} lleva ${elevadas} inventarios con desvío elevado`,text:'Requiere investigación.'});
   });
-
   const acc=Math.round(data.filter(d=>d.estado==='COINCIDE').length/data.length*100);
-  if(acc<60) alerts.push({type:'critical',icon:'⚠️',label:`Precisión: ${acc}%`,tooltip:'Menos del 60% de los productos coinciden con el stock teórico.'});
-  else if(acc>=85) alerts.push({type:'good',icon:'✅',label:`Precisión: ${acc}%`,tooltip:'La mayoría de los productos están dentro del rango aceptable.'});
-
+  if(acc<60) alerts.push({type:'critical',icon:'⚠️',title:`Precisión crítica: ${acc}%`,text:'Menos del 60% de productos coinciden.'});
+  else if(acc>=85) alerts.push({type:'good',icon:'✅',title:`Buena precisión: ${acc}%`,text:'La mayoría de productos están dentro del rango.'});
   const famImp={};
   data.forEach(d=>{if(d.estado!=='COINCIDE') famImp[d.familia]=(famImp[d.familia]||0)+d.impacto;});
   const topFam=Object.entries(famImp).sort((a,b)=>b[1]-a[1])[0];
-  if(topFam&&topFam[1]>0) alerts.push({type:'warn',icon:'📦',label:topFam[0],tooltip:`Mayor impacto económico: € ${topFam[1].toFixed(0)} en desvíos esta quincena.`});
-
-  if(historico.quincenas.length>0){
-    const sortedQ=[...historico.quincenas].sort((a,b)=>new Date(b.fecha)-new Date(a.fecha));
-    const prevQ=sortedQ.length>1?sortedQ[1]:null;
-    if(prevQ){
-      const curImp=data.reduce((s,d)=>s+(d.estado!=='COINCIDE'?d.impacto:0),0);
-      const prevImp=parseFloat(prevQ.impacto)||0;
-      const pctDiff=prevImp>0?Math.round(((curImp-prevImp)/prevImp)*100):0;
-      if(curImp>prevImp&&pctDiff>10) alerts.push({type:'warn',icon:'📈',label:`Impacto +${pctDiff}%`,tooltip:`El impacto económico subió ${pctDiff}% vs ${prevQ.quincena}. De €${prevImp.toFixed(0)} a €${curImp.toFixed(0)}.`});
-      else if(curImp<prevImp) alerts.push({type:'good',icon:'📉',label:`Impacto -${Math.abs(pctDiff)}%`,tooltip:`El impacto económico bajó vs ${prevQ.quincena}. De €${prevImp.toFixed(0)} a €${curImp.toFixed(0)}.`});
-    }
+  if(topFam) alerts.push({type:'warn',icon:'📦',title:`${topFam[0]} concentra el mayor impacto`,text:`€ ${topFam[1].toFixed(0)} en desvíos.`});
+  if(historico.semanas.length>0){
+    const prevQ=[...historico.semanas].sort((a,b)=>new Date(b.fecha)-new Date(a.fecha))[0];
+    const curImp=data.reduce((s,d)=>s+(d.estado!=='COINCIDE'?d.impacto:0),0);
+    const prevImp=parseFloat(prevQ.impacto)||0;
+    const pctDiff=prevImp>0?Math.round(((curImp-prevImp)/prevImp)*100):0;
+    if(curImp>prevImp&&pctDiff>10) alerts.push({type:'warn',icon:'📈',title:`Impacto económico subió ${pctDiff}%`,text:`De €${prevImp.toFixed(0)} a €${curImp.toFixed(0)}.`});
+    else if(curImp<prevImp) alerts.push({type:'good',icon:'📉',title:`Impacto económico bajó ${Math.abs(pctDiff)}%`,text:`De €${prevImp.toFixed(0)} a €${curImp.toFixed(0)}.`});
   }
-
-  if(!alerts.length) alerts.push({type:'good',icon:'🎉',label:'Todo bajo control',tooltip:'No se detectaron alertas críticas en este inventario.'});
-
-  document.getElementById('alertsGrid').innerHTML=alerts.map(a=>`
-    <div class="alert-badge ${a.type}">
-      ${a.icon} ${a.label}
-      <div class="alert-tooltip">${a.tooltip}</div>
-    </div>`).join('');
+  if(!alerts.length) alerts.push({type:'good',icon:'🎉',title:'Todo bajo control',text:'No se detectaron alertas críticas.'});
+  document.getElementById('alertsGrid').innerHTML=alerts.map(a=>`<div class="alert-item ${a.type}"><div class="alert-icon">${a.icon}</div><div class="alert-text"><strong>${a.title}</strong>${a.text}</div></div>`).join('');
   document.getElementById('alertCount').textContent=`(${alerts.length})`;
   document.getElementById('alertsSection').style.display='block';
 }
@@ -964,12 +913,12 @@ function renderScatter(data){
 
 // ── Histórico chart ───────────────────────────────────────────
 function renderHistChart(){
-  if(!historico.quincenas.length){document.getElementById('histCard').style.display='none';return;}
-  const sorted=[...historico.quincenas].sort((a,b)=>new Date(a.fecha)-new Date(b.fecha));
+  if(!historico.semanas.length){document.getElementById('histCard').style.display='none';return;}
+  const sorted=[...historico.semanas].sort((a,b)=>new Date(a.fecha)-new Date(b.fecha));
   const ctx=document.getElementById('histChart').getContext('2d');
   if(histInst) histInst.destroy();
   histInst=new Chart(ctx,{type:'bar',data:{
-    labels:sorted.map(q=>q.quincena),
+    labels:sorted.map(q=>q.semana),
     datasets:[
       {label:'Elevada',data:sorted.map(q=>parseInt(q.elevada)||0),backgroundColor:'rgba(230,57,70,.8)',borderRadius:4,stack:'s'},
       {label:'Leve',data:sorted.map(q=>parseInt(q.leve)||0),backgroundColor:'rgba(244,162,37,.8)',borderRadius:4,stack:'s'},
@@ -983,7 +932,7 @@ function renderHistChart(){
   document.getElementById('histCard').style.display='block';
 }
 
-// ── Barras quincena ───────────────────────────────────────────
+// ── Barras semana ───────────────────────────────────────────
 function renderBars(data){
   const sorted=[...data].filter(d=>d.estado!=='COINCIDE').sort((a,b)=>b.impacto-a.impacto).slice(0,8);
   const max=sorted[0]?.impacto||1;
@@ -1036,17 +985,17 @@ function renderRankings(){
   if(!allProds.length){document.getElementById('rankEmpty').style.display='block';document.getElementById('rankCards').style.display='none';return;}
   document.getElementById('rankEmpty').style.display='none';document.getElementById('rankCards').style.display='grid';
   const map={};
-  allProds.forEach(p=>{if(!map[p.producto])map[p.producto]={producto:p.producto,familia:p.familia,registros:[],impTotal:0,elevadas:0,quincenas:new Set()};
+  allProds.forEach(p=>{if(!map[p.producto])map[p.producto]={producto:p.producto,familia:p.familia,registros:[],impTotal:0,elevadas:0,semanas:new Set()};
     map[p.producto].registros.push(p);map[p.producto].impTotal+=(parseFloat(p.impacto)||0);
-    if(p.estado==='ELEVADA')map[p.producto].elevadas++;map[p.producto].quincenas.add(p.quincena);});
+    if(p.estado==='ELEVADA')map[p.producto].elevadas++;map[p.producto].semanas.add(p.semana);});
   const prods=Object.values(map);
-  const totalQ=historico.quincenas.length;
+  const totalQ=historico.semanas.length;
 
   const row=(p,i,val,extra)=>`<tr><td style="font-weight:700;color:var(--text3)">#${i+1}</td>
     <td style="font-weight:600;cursor:pointer;color:var(--blue)" onclick="openPanel('${p.producto.replace(/'/g,"\\'")}') ">${p.producto}</td>
     <td>${val}</td><td>${extra}</td></tr>`;
 
-  document.getElementById('rankImpactoBody').innerHTML=[...prods].sort((a,b)=>b.impTotal-a.impTotal).slice(0,8).map((p,i)=>row(p,i,`€${p.impTotal.toFixed(0)}`,p.quincenas.size)).join('');
+  document.getElementById('rankImpactoBody').innerHTML=[...prods].sort((a,b)=>b.impTotal-a.impTotal).slice(0,8).map((p,i)=>row(p,i,`€${p.impTotal.toFixed(0)}`,p.semanas.size)).join('');
   document.getElementById('rankRecurBody').innerHTML=[...prods].filter(p=>p.elevadas>0).sort((a,b)=>b.elevadas-a.elevadas).slice(0,8).map((p,i)=>row(p,i,`<span class="pill p-red">${p.elevadas}</span>`,Math.round(p.elevadas/totalQ*100)+'%')).join('');
 
   const byTend=[...prods].filter(p=>p.registros.length>=2).map(p=>{
@@ -1057,8 +1006,8 @@ function renderRankings(){
   }).sort((a,b)=>b.delta-a.delta).slice(0,8);
   document.getElementById('rankPeorBody').innerHTML=byTend.map((p,i)=>row(p,i,`<span style="color:var(--red);font-weight:700">↑${(p.delta*100).toFixed(1)}%</span>`,`${(p.lastPct*100).toFixed(1)}%`)).join('');
 
-  const byStable=[...prods].filter(p=>p.quincenas.size>=2).map(p=>({...p,acc:Math.round(p.registros.filter(r=>r.estado==='COINCIDE').length/p.registros.length*100)})).sort((a,b)=>b.acc-a.acc).slice(0,8);
-  document.getElementById('rankEstableBody').innerHTML=byStable.map((p,i)=>row(p,i,`<span class="pill p-green">${p.acc}%</span>`,p.quincenas.size)).join('');
+  const byStable=[...prods].filter(p=>p.semanas.size>=2).map(p=>({...p,acc:Math.round(p.registros.filter(r=>r.estado==='COINCIDE').length/p.registros.length*100)})).sort((a,b)=>b.acc-a.acc).slice(0,8);
+  document.getElementById('rankEstableBody').innerHTML=byStable.map((p,i)=>row(p,i,`<span class="pill p-green">${p.acc}%</span>`,p.semanas.size)).join('');
 }
 
 // ── Evolución productos ───────────────────────────────────────
@@ -1068,7 +1017,7 @@ function renderProductos(){
   document.getElementById('prodEmpty').style.display='none';document.getElementById('prodCard').style.display='block';
   const map={};
   allProds.forEach(p=>{if(!map[p.producto])map[p.producto]={producto:p.producto,familia:p.familia,registros:[]};
-    map[p.producto].registros.push({quincena:p.quincena,fecha:p.fecha,pct:parseFloat(p.pct)||0,impacto:parseFloat(p.impacto)||0,estado:p.estado});});
+    map[p.producto].registros.push({semana:p.semana,fecha:p.fecha,pct:parseFloat(p.pct)||0,impacto:parseFloat(p.impacto)||0,estado:p.estado});});
   renderProdTable(Object.values(map));
 }
 
@@ -1097,7 +1046,7 @@ function openPanel(nombre){
   const cur=currentData.find(d=>d.producto===nombre);
   document.getElementById('panelName').textContent=nombre;
   document.getElementById('panelFamilia').textContent=hist[0]?.familia||cur?.familia||'—';
-  const allRegs=[...hist.map(p=>({quincena:p.quincena,fecha:p.fecha,pct:parseFloat(p.pct)||0,impacto:parseFloat(p.impacto)||0,estado:p.estado}))];
+  const allRegs=[...hist.map(p=>({semana:p.semana,fecha:p.fecha,pct:parseFloat(p.pct)||0,impacto:parseFloat(p.impacto)||0,estado:p.estado}))];
   const sorted=[...allRegs].sort((a,b)=>new Date(a.fecha||0)-new Date(b.fecha||0));
   const elevadas=allRegs.filter(r=>r.estado==='ELEVADA').length;
   const impAcum=allRegs.reduce((s,r)=>s+r.impacto,0);
@@ -1110,7 +1059,7 @@ function openPanel(nombre){
   const ctx=document.getElementById('panelChart').getContext('2d');
   if(panelChartInst) panelChartInst.destroy();
   panelChartInst=new Chart(ctx,{type:'line',data:{
-    labels:sorted.map(r=>r.quincena),
+    labels:sorted.map(r=>r.semana),
     datasets:[{label:'% Desviación',data:sorted.map(r=>parseFloat((r.pct*100).toFixed(2))),
       borderColor:'var(--blue)',backgroundColor:'rgba(24,119,242,.1)',fill:true,tension:.4,pointRadius:5,pointHoverRadius:8,
       pointBackgroundColor:sorted.map(r=>r.estado==='ELEVADA'?'#e63946':r.estado==='LEVE'?'#f4a225':'#22c55e')}]},
@@ -1121,7 +1070,7 @@ function openPanel(nombre){
   document.getElementById('panelBody').innerHTML=[...sorted].reverse().map(r=>{
     const pill=r.estado==='ELEVADA'?'p-red':r.estado==='LEVE'?'p-amber':'p-green';
     const lab=r.estado==='ELEVADA'?'Elevada':r.estado==='LEVE'?'Leve':'Coincide';
-    return `<tr><td>${r.quincena}</td><td>${(r.pct>=0?'+':'')+(r.pct*100).toFixed(1)}%</td><td>€${r.impacto.toFixed(2)}</td><td><span class="pill ${pill}">${lab}</span></td></tr>`;
+    return `<tr><td>${r.semana}</td><td>${(r.pct>=0?'+':'')+(r.pct*100).toFixed(1)}%</td><td>€${r.impacto.toFixed(2)}</td><td><span class="pill ${pill}">${lab}</span></td></tr>`;
   }).join('');
   document.getElementById('panelOverlay').style.display='block';
   document.getElementById('panel').style.display='block';
@@ -1132,7 +1081,7 @@ function closePanel(){document.getElementById('panelOverlay').style.display='non
 // ── Filtros ───────────────────────────────────────────────────
 function setFilter(f,btn){activeFilter=f;document.querySelectorAll('.fbtn').forEach(b=>b.className='fbtn');btn.classList.add(f==='all'?'f-all':f==='ELEVADA'?'f-red':f==='LEVE'?'f-amber':'f-green');renderDetail(currentData);}
 function searchDetail(v){searchTerm=v.toLowerCase();renderDetail(currentData);}
-function searchProductos(v){const map={};historico.productos.forEach(p=>{if(!map[p.producto])map[p.producto]={producto:p.producto,familia:p.familia,registros:[]};map[p.producto].registros.push({quincena:p.quincena,fecha:p.fecha,pct:parseFloat(p.pct)||0,impacto:parseFloat(p.impacto)||0,estado:p.estado});});renderProdTable(Object.values(map),v.toLowerCase());}
+function searchProductos(v){const map={};historico.productos.forEach(p=>{if(!map[p.producto])map[p.producto]={producto:p.producto,familia:p.familia,registros:[]};map[p.producto].registros.push({semana:p.semana,fecha:p.fecha,pct:parseFloat(p.pct)||0,impacto:parseFloat(p.impacto)||0,estado:p.estado});});renderProdTable(Object.values(map),v.toLowerCase());}
 function sortTable(col){if(sortCol===col)sortAsc=!sortAsc;else{sortCol=col;sortAsc=false;}renderDetail(currentData);}
 
 // ── Nav ───────────────────────────────────────────────────────
@@ -1148,42 +1097,6 @@ function showView(id,tab){
 }
 
 // ── Render all ────────────────────────────────────────────────
-function renderTop5(data){
-  const elevados=[...data].filter(d=>d.estado==='ELEVADA').sort((a,b)=>b.impacto-a.impacto).slice(0,5);
-  const leves=[...data].filter(d=>d.estado==='LEVE').sort((a,b)=>b.impacto-a.impacto).slice(0,3);
-  const todos=[...elevados,...leves].slice(0,5);
-  if(!todos.length){
-    document.getElementById('top5Card').style.display='none';
-    return;
-  }
-  const prodHist={};
-  historico.productos.forEach(p=>{if(!prodHist[p.producto])prodHist[p.producto]=0;if(p.estado==='ELEVADA')prodHist[p.producto]++;});
-  document.getElementById('top5Content').innerHTML=`
-    <table class="atbl">
-      <thead><tr>
-        <th>Producto</th><th>Familia</th><th>% Desviación</th>
-        <th>Impacto €</th><th>Estado</th><th>Recurrencia</th>
-      </tr></thead>
-      <tbody>${todos.map(d=>{
-        const pill=d.estado==='ELEVADA'?'p-red':'p-amber';
-        const lab=d.estado==='ELEVADA'?'Elevada':'Leve';
-        const veces=prodHist[d.producto]||0;
-        const recur=veces>=2?`<span class="pill p-red">🔁 ${veces}x</span>`:veces===1?`<span class="pill p-amber">1x</span>`:'<span style="color:var(--text3)">Nuevo</span>';
-        const pct=(d.pct>=0?'+':'')+(d.pct*100).toFixed(1)+'%';
-        return `<tr>
-          <td style="font-weight:700">${d.producto}</td>
-          <td>${d.familia}</td>
-          <td style="font-weight:700;color:${d.estado==='ELEVADA'?'var(--red)':'var(--amber)'}">${pct}</td>
-          <td style="font-weight:700">€ ${d.impacto.toFixed(2)}</td>
-          <td><span class="pill ${pill}">${lab}</span></td>
-          <td>${recur}</td>
-        </tr>`;
-      }).join('')}
-      </tbody>
-    </table>`;
-  document.getElementById('top5Card').style.display='block';
-}
-
 function renderAll(){
   if(!currentData.length) return;
   const data=currentData;
@@ -1193,7 +1106,6 @@ function renderAll(){
   renderKPIs(data);
   renderComparacion(data);
   renderAlertas(data);
-  renderTop5(data);
   renderTreemap(data);
   renderScatter(data);
   renderHistChart();
@@ -1207,13 +1119,13 @@ function renderAll(){
   document.getElementById('mainNav').style.display='flex';
 }
 
-// ── Cerrar quincena ───────────────────────────────────────────
+// ── Cerrar semana ───────────────────────────────────────────
 async function cerrarQuincena(){
   if(!currentData.length){showNotice('Primero cargá un export.','err');return;}
   if(!APPS_SCRIPT_URL){showNotice('Configurá la URL del Apps Script.','err');return;}
-  const q=prompt('Nombre de la quincena (ej: Q1 Jul 2026):');
+  const q=prompt('Nombre de la semana (ej: Q1 Jul 2026):');
   if(!q) return;
-  if(!confirm(`¿Guardás la quincena "${q}" en Google Sheets?`)) return;
+  if(!confirm(`¿Guardás la semana "${q}" en Google Sheets?`)) return;
   const btn=document.getElementById('btnCerrar');
   const bar=document.getElementById('progressBar'),fill=document.getElementById('progressFill');
   btn.innerHTML='<span class="spinner"></span> Guardando...';btn.disabled=true;bar.style.display='block';
@@ -1221,21 +1133,20 @@ async function cerrarQuincena(){
     const fecha=new Date().toISOString(),loteSize=10;
     for(let i=0;i<currentData.length;i+=loteSize){
       const lote=currentData.slice(i,i+loteSize);
-      const payload={action:'save',quincena:q,fecha,productos:lote,primerLote:i===0};
+      const payload={action:'save',semana:q,fecha,productos:lote,primerLote:i===0};
       const encoded=encodeURIComponent(JSON.stringify(payload));
       const d=await jsonpCall(APPS_SCRIPT_URL+'?action=save&payload='+encoded);
       if(!d.ok) throw new Error(d.error||'Error al guardar');
       fill.style.width=Math.round(((i+loteSize)/currentData.length)*100)+'%';
     }
-    showNotice(`Quincena "${q}" guardada correctamente.`,'ok');
+    showNotice(`Semana "${q}" guardada correctamente.`,'ok');
     document.getElementById('qbadge').textContent=q;document.getElementById('qbadge').style.display='block';
     await fetchHistorico();
-    // Actualizar selector y seleccionar la quincena recién guardada
-    actualizarSelectorQuincena();
-    const sel=document.getElementById('quincenavSelector');
+    actualizarSelectorSemana();
+    const sel=document.getElementById('semanaSelector');
     if(sel) sel.value=q;
   }catch(e){showNotice('Error: '+e.message,'err');}
-  finally{btn.innerHTML='✓ Cerrar quincena → Sheets';btn.disabled=false;setTimeout(()=>{bar.style.display='none';fill.style.width='0%';},2000);}
+  finally{btn.innerHTML='✓ Cerrar semana → Sheets';btn.disabled=false;setTimeout(()=>{bar.style.display='none';fill.style.width='0%';},2000);}
 }
 
 // ── Procesar archivo ──────────────────────────────────────────
@@ -1259,11 +1170,44 @@ zone.addEventListener('dragleave',()=>zone.classList.remove('drag'));
 zone.addEventListener('drop',e=>{e.preventDefault();zone.classList.remove('drag');if(e.dataTransfer.files[0])processFile(e.dataTransfer.files[0])});
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closePanel();});
 
-// ── Comparar quincenas ────────────────────────────────────────
+// ── Selector de semana ────────────────────────────────────
+function actualizarSelectorSemana(){
+  const qs=historico.quincenas;
+  if(!qs||!qs.length) return;
+  const sorted=[...qs].sort((a,b)=>new Date(b.fecha)-new Date(a.fecha));
+  const sel=document.getElementById('semanaSelector');
+  sel.innerHTML=sorted.map(q=>`<option value="${q.quincena}">${q.quincena}</option>`).join('');
+  const wrap=document.getElementById('semanaSelectWrap');
+  wrap.style.display='flex';
+}
+
+function cambiarSemanaVista(semana){
+  const prods=historico.productos.filter(p=>p.quincena===semana);
+  if(!prods.length){showNotice('No hay datos para esta semana.','err');return;}
+  currentData=prods.map(p=>({
+    familia:p.familia, producto:p.producto, unidad:p.unidad||'',
+    cantTeo:parseFloat(p.cantTeo)||0, cantReal:parseFloat(p.cantReal)||0,
+    desv:parseFloat(p.desv)||0, pct:parseFloat(p.pct)||0,
+    costeTeo:parseFloat(p.costeTeo)||0, costeReal:parseFloat(p.costeReal)||0,
+    impacto:parseFloat(p.impacto)||0, estado:p.estado||getEstado(parseFloat(p.pct)||0)
+  }));
+  document.getElementById('landingSection').style.display='none';
+  renderAll();
+  showNotice(`Viendo semana: ${semana}`,'inf');
+}
+
+function cargarUltimaSemana(){
+  const qs=historico.quincenas;
+  if(!qs||!qs.length) return;
+  const sorted=[...qs].sort((a,b)=>new Date(b.fecha)-new Date(a.fecha));
+  cambiarSemanaVista(sorted[0].quincena);
+}
+
+// ── Comparar semanas ────────────────────────────────────────
 let compBarInst=null, compImpInst=null;
 
 function renderCompararSelector(){
-  const qs=historico.quincenas;
+  const qs=historico.semanas;
   if(!qs||!qs.length){
     document.getElementById('compararEmpty').style.display='block';
     document.getElementById('compararSelector').style.display='none';
@@ -1272,27 +1216,27 @@ function renderCompararSelector(){
   document.getElementById('compararEmpty').style.display='none';
   document.getElementById('compararSelector').style.display='block';
   const sorted=[...qs].sort((a,b)=>new Date(b.fecha)-new Date(a.fecha));
-  const opts=sorted.map(q=>`<option value="${q.quincena}">${q.quincena}</option>`).join('');
+  const opts=sorted.map(q=>`<option value="${q.semana}">${q.semana}</option>`).join('');
   document.getElementById('selectA').innerHTML=opts;
   document.getElementById('selectB').innerHTML=opts;
   // Default: A=penúltima, B=última
   if(sorted.length>=2){
-    document.getElementById('selectA').value=sorted[1].quincena;
-    document.getElementById('selectB').value=sorted[0].quincena;
+    document.getElementById('selectA').value=sorted[1].semana;
+    document.getElementById('selectB').value=sorted[0].semana;
   }
 }
 
 function ejecutarComparacion(){
   const qA=document.getElementById('selectA').value;
   const qB=document.getElementById('selectB').value;
-  if(qA===qB){showNotice('Elegí dos quincenas diferentes.','err');return;}
+  if(qA===qB){showNotice('Elegí dos semanas diferentes.','err');return;}
 
-  const prodsA=historico.productos.filter(p=>p.quincena===qA);
-  const prodsB=historico.productos.filter(p=>p.quincena===qB);
-  const metA=historico.quincenas.find(q=>q.quincena===qA);
-  const metB=historico.quincenas.find(q=>q.quincena===qB);
+  const prodsA=historico.productos.filter(p=>p.semana===qA);
+  const prodsB=historico.productos.filter(p=>p.semana===qB);
+  const metA=historico.semanas.find(q=>q.semana===qA);
+  const metB=historico.semanas.find(q=>q.semana===qB);
 
-  if(!prodsA.length||!prodsB.length){showNotice('No hay datos para una de las quincenas seleccionadas.','err');return;}
+  if(!prodsA.length||!prodsB.length){showNotice('No hay datos para una de las semanas seleccionadas.','err');return;}
 
   // KPIs
   const elevA=parseInt(metA.elevada)||0, elevB=parseInt(metB.elevada)||0;
