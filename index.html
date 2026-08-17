@@ -322,7 +322,7 @@ input[type=file]{display:none}
         <div class="kpi-grid" id="kpiGrid"></div>
       </div>
       <div class="comp-hero" id="compHero" style="display:none">
-        <div class="comp-title">Comparación con semana anterior</div>
+        <div class="comp-title">Comparación con inventario anterior</div>
         <div class="comp-vs" id="compVs"></div>
         <div class="comp-grid" id="compGrid"></div>
         <div class="comp-recur-title">Productos con desvío elevado</div>
@@ -616,7 +616,7 @@ async function fetchHistorico(){
 
 // ── Historial preview en landing ─────────────────────────────
 function renderHistPreview(){
-  const qs=historico.semanas;
+  const qs=historico.quincenas;
   const el=document.getElementById('histPreviewContent');
   const cnt=document.getElementById('histPreviewCount');
   if(!qs||!qs.length){
@@ -630,7 +630,7 @@ function renderHistPreview(){
     <thead><tr><th>Semana</th><th>Total</th><th>Elevada</th><th>Coincide</th><th>€</th></tr></thead>
     <tbody>${sorted.slice(0,6).map(q=>`
       <tr>
-        <td style="font-weight:700">${q.semana}</td>
+        <td style="font-weight:700">${q.quincena}</td>
         <td>${q.total}</td>
         <td><span class="pill p-red">${q.elevada}</span></td>
         <td><span class="pill p-green">${q.coincide}</span></td>
@@ -642,10 +642,10 @@ function renderHistPreview(){
 
 // ── Mostrar histórico solo (sin semana cargada) ─────────────
 function renderHistOnly(){
-  if(!historico.semanas||!historico.semanas.length) return;
+  if(!historico.quincenas||!historico.quincenas.length) return;
   document.getElementById('mainNav').style.display='flex';
   document.getElementById('execOnlyHist').style.display='block';
-  const sorted=[...historico.semanas].sort((a,b)=>new Date(a.fecha)-new Date(b.fecha));
+  const sorted=[...historico.quincenas].sort((a,b)=>new Date(a.fecha)-new Date(b.fecha));
   const ctx=document.getElementById('histChartOnly').getContext('2d');
   if(histOnlyInst) histOnlyInst.destroy();
   histOnlyInst=new Chart(ctx,{
@@ -668,7 +668,7 @@ function renderHistOnly(){
 }
 
 function renderNavVisibility(){
-  if(historico.semanas&&historico.semanas.length>0){
+  if(historico.quincenas&&historico.quincenas.length>0){
     document.getElementById('mainNav').style.display='flex';
   }
 }
@@ -676,7 +676,7 @@ function renderNavVisibility(){
 // ── Gestión de semanas ──────────────────────────────────────
 function renderGestion(){
   const el=document.getElementById('gestionContent');
-  const qs=historico.semanas;
+  const qs=historico.quincenas;
   if(!qs||!qs.length){
     el.innerHTML='<div class="empty"><div class="empty-icon">📭</div><div>No hay semanas guardadas todavía</div></div>';
     return;
@@ -687,7 +687,7 @@ function renderGestion(){
       <thead><tr><th>Semana</th><th>Fecha guardado</th><th>Total prods.</th><th>🟢 Coincide</th><th>🟡 Leve</th><th>🔴 Elevada</th><th>Impacto €</th></tr></thead>
       <tbody>${sorted.map(q=>`
         <tr>
-          <td style="font-weight:700">${q.semana}</td>
+          <td style="font-weight:700">${q.quincena}</td>
           <td style="color:var(--text3)">${q.fecha?new Date(q.fecha).toLocaleDateString('es-AR',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}):'-'}</td>
           <td>${q.total}</td>
           <td><span class="pill p-green">${q.coincide}</span></td>
@@ -720,7 +720,7 @@ function resetDashboard(){
   document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
   document.querySelector('.nav-tab').classList.add('active');
   renderHistPreview();
-  if(historico.semanas&&historico.semanas.length) renderHistOnly();
+  if(historico.quincenas&&historico.quincenas.length) renderHistOnly();
   showNotice('Inventario limpiado. El histórico sigue disponible.','inf');
 }
 
@@ -793,7 +793,7 @@ function renderKPIs(data){
   const imp=data.reduce((s,d)=>s+(d.estado!=='COINCIDE'?d.impacto:0),0);
   const acc=Math.round(coin/tot*100);
   // Penúltima semana para comparar tendencias
-  const sortedForKpi=[...historico.semanas].sort((a,b)=>new Date(b.fecha)-new Date(a.fecha));
+  const sortedForKpi=[...historico.quincenas].sort((a,b)=>new Date(b.fecha)-new Date(a.fecha));
   const prevQ=sortedForKpi.length>1?sortedForKpi[1]:null;
 
   function trend(cur,prev,higherIsBad){
@@ -815,11 +815,11 @@ function renderKPIs(data){
 
 // ── Comparación ───────────────────────────────────────────────
 function renderComparacion(data){
-  if(!historico.semanas||!historico.semanas.length){document.getElementById('compHero').style.display='none';return;}
-  const sortedQ=[...historico.semanas].sort((a,b)=>new Date(b.fecha)-new Date(a.fecha));
+  if(!historico.quincenas||!historico.quincenas.length){document.getElementById('compHero').style.display='none';return;}
+  const sortedQ=[...historico.quincenas].sort((a,b)=>new Date(b.fecha)-new Date(a.fecha));
   // Usar el penúltimo inventario para comparar (el último es el recién cargado)
   const prevQ=sortedQ.length>1?sortedQ[1]:sortedQ[0];
-  const prevProds=historico.productos.filter(p=>p.semana===prevQ.semana);
+  const prevProds=historico.productos.filter(p=>p.quincena===prevQ.semana);
   const curElev=data.filter(d=>d.estado==='ELEVADA').length;
   const curCoin=data.filter(d=>d.estado==='COINCIDE').length;
   const curImp=data.reduce((s,d)=>s+(d.estado!=='COINCIDE'?d.impacto:0),0);
@@ -869,8 +869,8 @@ function renderAlertas(data){
   data.forEach(d=>{if(d.estado!=='COINCIDE') famImp[d.familia]=(famImp[d.familia]||0)+d.impacto;});
   const topFam=Object.entries(famImp).sort((a,b)=>b[1]-a[1])[0];
   if(topFam) alerts.push({type:'warn',icon:'📦',title:`${topFam[0]} concentra el mayor impacto`,text:`€ ${topFam[1].toFixed(0)} en desvíos.`});
-  if(historico.semanas.length>0){
-    const prevQ=[...historico.semanas].sort((a,b)=>new Date(b.fecha)-new Date(a.fecha))[0];
+  if(historico.quincenas.length>0){
+    const prevQ=[...historico.quincenas].sort((a,b)=>new Date(b.fecha)-new Date(a.fecha))[0];
     const curImp=data.reduce((s,d)=>s+(d.estado!=='COINCIDE'?d.impacto:0),0);
     const prevImp=parseFloat(prevQ.impacto)||0;
     const pctDiff=prevImp>0?Math.round(((curImp-prevImp)/prevImp)*100):0;
@@ -913,8 +913,8 @@ function renderScatter(data){
 
 // ── Histórico chart ───────────────────────────────────────────
 function renderHistChart(){
-  if(!historico.semanas.length){document.getElementById('histCard').style.display='none';return;}
-  const sorted=[...historico.semanas].sort((a,b)=>new Date(a.fecha)-new Date(b.fecha));
+  if(!historico.quincenas.length){document.getElementById('histCard').style.display='none';return;}
+  const sorted=[...historico.quincenas].sort((a,b)=>new Date(a.fecha)-new Date(b.fecha));
   const ctx=document.getElementById('histChart').getContext('2d');
   if(histInst) histInst.destroy();
   histInst=new Chart(ctx,{type:'bar',data:{
@@ -989,7 +989,7 @@ function renderRankings(){
     map[p.producto].registros.push(p);map[p.producto].impTotal+=(parseFloat(p.impacto)||0);
     if(p.estado==='ELEVADA')map[p.producto].elevadas++;map[p.producto].semanas.add(p.semana);});
   const prods=Object.values(map);
-  const totalQ=historico.semanas.length;
+  const totalQ=historico.quincenas.length;
 
   const row=(p,i,val,extra)=>`<tr><td style="font-weight:700;color:var(--text3)">#${i+1}</td>
     <td style="font-weight:600;cursor:pointer;color:var(--blue)" onclick="openPanel('${p.producto.replace(/'/g,"\\'")}') ">${p.producto}</td>
@@ -1123,7 +1123,7 @@ function renderAll(){
 async function cerrarQuincena(){
   if(!currentData.length){showNotice('Primero cargá un export.','err');return;}
   if(!APPS_SCRIPT_URL){showNotice('Configurá la URL del Apps Script.','err');return;}
-  const q=prompt('Nombre de la semana (ej: S1 Jul 2026):');
+  const q=prompt('Nombre de la semana (ej: Q1 Jul 2026):');
   if(!q) return;
   if(!confirm(`¿Guardás la semana "${q}" en Google Sheets?`)) return;
   const btn=document.getElementById('btnCerrar');
@@ -1207,7 +1207,7 @@ function cargarUltimaSemana(){
 let compBarInst=null, compImpInst=null;
 
 function renderCompararSelector(){
-  const qs=historico.semanas;
+  const qs=historico.quincenas;
   if(!qs||!qs.length){
     document.getElementById('compararEmpty').style.display='block';
     document.getElementById('compararSelector').style.display='none';
@@ -1216,7 +1216,7 @@ function renderCompararSelector(){
   document.getElementById('compararEmpty').style.display='none';
   document.getElementById('compararSelector').style.display='block';
   const sorted=[...qs].sort((a,b)=>new Date(b.fecha)-new Date(a.fecha));
-  const opts=sorted.map(q=>`<option value="${q.semana}">${q.semana}</option>`).join('');
+  const opts=sorted.map(q=>`<option value="${q.quincena}">${q.quincena}</option>`).join('');
   document.getElementById('selectA').innerHTML=opts;
   document.getElementById('selectB').innerHTML=opts;
   // Default: A=penúltima, B=última
@@ -1231,10 +1231,10 @@ function ejecutarComparacion(){
   const qB=document.getElementById('selectB').value;
   if(qA===qB){showNotice('Elegí dos semanas diferentes.','err');return;}
 
-  const prodsA=historico.productos.filter(p=>p.semana===qA);
-  const prodsB=historico.productos.filter(p=>p.semana===qB);
-  const metA=historico.semanas.find(q=>q.semana===qA);
-  const metB=historico.semanas.find(q=>q.semana===qB);
+  const prodsA=historico.productos.filter(p=>p.quincena===qA);
+  const prodsB=historico.productos.filter(p=>p.quincena===qB);
+  const metA=historico.quincenas.find(q=>q.quincena===qA);
+  const metB=historico.quincenas.find(q=>q.quincena===qB);
 
   if(!prodsA.length||!prodsB.length){showNotice('No hay datos para una de las semanas seleccionadas.','err');return;}
 
