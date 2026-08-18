@@ -353,7 +353,7 @@ input[type=file]{display:none}
       </div>
       <!-- Top 5 productos críticos -->
       <div class="card card-full" id="top5Card" style="display:none;margin-bottom:24px">
-        <div class="card-title">Productos que requieren atención inmediata</div>
+        <div class="card-title">Diferencias detectadas — estado de investigación</div>
         <div id="top5Content"></div>
       </div>
       <!-- Treemap y scatter ocultos -->
@@ -793,7 +793,13 @@ function parseXLSX(file){
 // ── Health Score ─────────────────────────────────────────────
 function calcHealth(data){
   const tot=data.length; if(!tot) return 0;
-  return Math.max(0,Math.round(100-(data.filter(d=>d.estado==='ELEVADA').length/tot*60)-(data.filter(d=>d.estado==='LEVE').length/tot*25)));
+  const resumen=getConcResumen(data);
+  // Conciliadas cuentan como resueltas para el health score
+  const elevPend=resumen.pendientes.filter(d=>d.estado==='ELEVADA').length;
+  const elevParc=resumen.parciales.filter(d=>d.estado==='ELEVADA').length*0.5;
+  const levePend=resumen.pendientes.filter(d=>d.estado==='LEVE').length;
+  const leveParc=resumen.parciales.filter(d=>d.estado==='LEVE').length*0.5;
+  return Math.max(0,Math.round(100-((elevPend+elevParc)/tot*60)-((levePend+leveParc)/tot*25)));
 }
 
 function renderGauge(score){
@@ -825,12 +831,34 @@ function renderKPIs(data){
     return `<div class="kpi-trend ${cls}">${d>0?'↑ +':'↓ '}${Math.abs(d)}</div>`;
   }
 
+  const resumen=getConcResumen(data);
+  const impConc=getImpactoConc(data);
+  const pendCount=resumen.pendientes.length+resumen.parciales.length;
+  const concCount=resumen.conciliadas.length;
+
   document.getElementById('kpiGrid').innerHTML=`
     <div class="kpi-card blue"><div class="kpi-label">Precisión</div><div class="kpi-val blue">${acc}%</div><div class="kpi-sub">${coin} de ${tot} productos coinciden</div>${prevQ?trend(acc,Math.round(parseInt(prevQ.coincide)/parseInt(prevQ.total)*100),false):''}</div>
     <div class="kpi-card red"><div class="kpi-label">Desvío elevado</div><div class="kpi-val red">${elev}</div><div class="kpi-sub">+15% de diferencia</div>${prevQ?trend(elev,parseInt(prevQ.elevada),true):''}</div>
     <div class="kpi-card amber"><div class="kpi-label">Desvío leve</div><div class="kpi-val amber">${leve}</div><div class="kpi-sub">2–15% de diferencia</div>${prevQ?trend(leve,parseInt(prevQ.leve),true):''}</div>
     <div class="kpi-card green"><div class="kpi-label">Coinciden</div><div class="kpi-val green">${coin}</div><div class="kpi-sub">${acc}% del total</div>${prevQ?trend(coin,parseInt(prevQ.coincide),false):''}</div>
-    <div class="kpi-card purple"><div class="kpi-label">Impacto €</div><div class="kpi-val purple">€${imp.toFixed(0)}</div><div class="kpi-sub">en productos con desvío</div>${prevQ?trend(Math.round(imp),Math.round(parseFloat(prevQ.impacto)||0),true):''}</div>
+    <div class="kpi-card purple">
+      <div class="kpi-label">Impacto económico</div>
+      <div class="kpi-val purple">€${imp.toFixed(0)}</div>
+      <div class="kpi-sub" style="display:flex;flex-direction:column;gap:2px;margin-top:6px">
+        <span style="color:var(--red)">🔴 €${impConc.sinExplicar.toFixed(0)} sin explicar</span>
+        ${impConc.explicado>0?`<span style="color:#22c55e">🟢 €${impConc.explicado.toFixed(0)} conciliado</span>`:''}
+      </div>
+      ${prevQ?trend(Math.round(imp),Math.round(parseFloat(prevQ.impacto)||0),true):''}
+    </div>
+    ${pendCount>0||concCount>0?`
+    <div class="kpi-card" style="border-top:3px solid #1877F2">
+      <div class="kpi-label">Investigación</div>
+      <div style="display:flex;flex-direction:column;gap:4px;margin-top:4px;font-size:12px">
+        ${resumen.pendientes.length>0?`<span style="color:var(--red)">🔴 ${resumen.pendientes.length} pendiente${resumen.pendientes.length!==1?'s':''}</span>`:''}
+        ${resumen.parciales.length>0?`<span style="color:var(--amber)">🟠 ${resumen.parciales.length} parcial${resumen.parciales.length!==1?'es':''}</span>`:''}
+        ${resumen.conciliadas.length>0?`<span style="color:#22c55e">🟢 ${resumen.conciliadas.length} conciliada${resumen.conciliadas.length!==1?'s':''}</span>`:''}
+      </div>
+    </div>`:''}
   `;
 }
 
@@ -1127,30 +1155,53 @@ function showView(id,tab){
 
 // ── Render all ────────────────────────────────────────────────
 function renderTop5(data){
-  const elevados=[...data].filter(d=>d.estado==='ELEVADA').sort((a,b)=>b.impacto-a.impacto).slice(0,5);
+  const elevados=[...data].filter(d=>d.estado==='ELEVADA').sort((a,b)=>b.impacto-a.impacto);
   const leves=[...data].filter(d=>d.estado==='LEVE').sort((a,b)=>b.impacto-a.impacto);
-  const todos=[...elevados,...leves].slice(0,5);
+  const todos=[...elevados,...leves].slice(0,8);
   if(!todos.length){document.getElementById('top5Card').style.display='none';return;}
   const prodHist={};
   historico.productos.forEach(p=>{if(!prodHist[p.producto])prodHist[p.producto]=0;if(p.estado==='ELEVADA')prodHist[p.producto]++;});
-  document.getElementById('top5Content').innerHTML=`
+
+  // Summary row
+  const resumen=getConcResumen(data);
+  const impConc=getImpactoConc(data);
+  const summaryHtml=`
+    <div style="display:flex;gap:12px;flex-wrap:wrap;padding:10px 14px;background:var(--bg);border-radius:8px;margin-bottom:14px;font-size:12px;align-items:center">
+      <span style="font-weight:600;color:var(--text2)">Investigación:</span>
+      ${resumen.pendientes.length>0?`<span style="color:var(--red)">🔴 ${resumen.pendientes.length} pendiente${resumen.pendientes.length!==1?'s':''}</span>`:''}
+      ${resumen.parciales.length>0?`<span style="color:var(--amber)">🟠 ${resumen.parciales.length} parcial${resumen.parciales.length!==1?'es':''}</span>`:''}
+      ${resumen.conciliadas.length>0?`<span style="color:#22c55e">🟢 ${resumen.conciliadas.length} conciliada${resumen.conciliadas.length!==1?'s':''}</span>`:''}
+      <span style="margin-left:auto;color:var(--text3)">€${impConc.sinExplicar.toFixed(0)} sin explicar · €${impConc.explicado.toFixed(0)} conciliado</span>
+    </div>`;
+
+  document.getElementById('top5Content').innerHTML=summaryHtml+`
     <table class="atbl">
       <thead><tr>
         <th>Producto</th><th>Familia</th><th>% Desviación</th>
-        <th>Impacto €</th><th>Estado</th><th>Recurrencia</th>
+        <th>Impacto €</th><th>Desvío</th><th>Investigación</th><th>Recurrencia</th>
       </tr></thead>
       <tbody>${todos.map(d=>{
         const pill=d.estado==='ELEVADA'?'p-red':'p-amber';
         const lab=d.estado==='ELEVADA'?'Elevada':'Leve';
         const veces=prodHist[d.producto]||0;
-        const recur=veces>=2?`<span class="pill p-red">🔁 ${veces}x</span>`:veces===1?`<span class="pill p-amber">1x</span>`:'<span style="color:var(--text3)">Nuevo</span>';
+        const recur=veces>=2?`<span class="pill p-red">🔁 ${veces}x</span>`:veces===1?`<span class="pill p-amber">1x</span>`:'<span style="color:var(--text3);font-size:11px">Nuevo</span>';
         const pct=(d.pct>=0?'+':'')+(d.pct*100).toFixed(1)+'%';
-        return `<tr>
+        const key=d.producto+'||actual';
+        const conc=conciliaciones[key]||{estado:'PENDIENTE',explicaciones:[]};
+        const desvAbs=Math.abs(d.desv);
+        const expCant=conc.explicaciones.reduce((s,e)=>s+e.cantidad,0);
+        const pctExp=desvAbs>0?Math.min(100,Math.round(expCant/desvAbs*100)):0;
+        const concIcon=conc.estado==='CONCILIADA'?'🟢':conc.estado==='PARCIAL'?'🟠':'🔴';
+        const concLbl=conc.estado==='CONCILIADA'?'Conciliada':conc.estado==='PARCIAL'?`Parcial (${pctExp}%)`:'Pendiente';
+        const concCls=conc.estado==='CONCILIADA'?'conc-conciliada':conc.estado==='PARCIAL'?'conc-parcial':'conc-pendiente';
+        const rowBg=conc.estado==='CONCILIADA'?'background:#edfff4':conc.estado==='PARCIAL'?'background:#fffbec':'';
+        return `<tr style="${rowBg}">
           <td style="font-weight:700">${d.producto}</td>
           <td>${d.familia}</td>
           <td style="font-weight:700;color:${d.estado==='ELEVADA'?'var(--red)':'var(--amber)'}">${pct}</td>
           <td style="font-weight:700">€${d.impacto.toFixed(2)}</td>
           <td><span class="pill ${pill}">${lab}</span></td>
+          <td><span class="conc-badge ${concCls}" onclick="abrirConciliacion('${d.producto.replace(/'/g,"\'")}','actual')">${concIcon} ${concLbl}</span></td>
           <td>${recur}</td>
         </tr>`;
       }).join('')}
@@ -1551,8 +1602,47 @@ function guardarExplicacion(producto, semana){
   const nuevoPendiente=Math.max(0,desvAbs-nuevoExplicado);
   conc.estado=nuevoPendiente<=0.01?'CONCILIADA':nuevoExplicado>0?'PARCIAL':'PENDIENTE';
   saveConciliaciones();
+  // Refresh all views that show conciliation impact
+  if(currentData.length){
+    renderGauge(calcHealth(currentData));
+    renderKPIs(currentData);
+    renderTop5(currentData);
+    renderAlertas(currentData);
+    renderDetail(currentData);
+  }
   abrirConciliacion(producto,semana);
-  renderDetail(currentData);
+}
+
+
+// ── Helpers de conciliación ────────────────────────────────────
+function getConcResumen(data){
+  // Devuelve resumen de conciliaciones para el dataset actual
+  const pendientes=[], parciales=[], conciliadas=[];
+  data.forEach(d=>{
+    if(d.estado==='COINCIDE') return;
+    const key=d.producto+'||actual';
+    const conc=conciliaciones[key]||{estado:'PENDIENTE',explicaciones:[]};
+    if(conc.estado==='CONCILIADA') conciliadas.push(d);
+    else if(conc.estado==='PARCIAL') parciales.push(d);
+    else pendientes.push(d);
+  });
+  return {pendientes, parciales, conciliadas};
+}
+
+function getImpactoConc(data){
+  // Calcula impacto sin explicar vs explicado
+  let sinExplicar=0, explicado=0;
+  data.forEach(d=>{
+    if(d.estado==='COINCIDE') return;
+    const key=d.producto+'||actual';
+    const conc=conciliaciones[key]||{estado:'PENDIENTE',explicaciones:[]};
+    const desvAbs=Math.abs(d.desv);
+    const expCant=conc.explicaciones.reduce((s,e)=>s+e.cantidad,0);
+    const pctExp=desvAbs>0?Math.min(1,expCant/desvAbs):0;
+    explicado+=d.impacto*pctExp;
+    sinExplicar+=d.impacto*(1-pctExp);
+  });
+  return {sinExplicar, explicado};
 }
 
 // Auto-conectar al iniciar
