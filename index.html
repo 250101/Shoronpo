@@ -242,7 +242,7 @@ input[type=file]{display:none}
 .loading-spinner{width:40px;height:40px;border:3px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:spin .8s linear infinite}
 .loading-text{font-size:14px;font-weight:600;color:var(--text2)}
 
-#semanaSelector option{background:#1259c3;color:#0d0d0d;}
+#semanaSelector option{background:#1259c3;color:#ffffff;}
 
 /* ── Alertas badges ─────────────────────── */
 .alerts-section{margin-bottom:16px}
@@ -256,9 +256,8 @@ input[type=file]{display:none}
 .alert-tooltip{display:none;position:absolute;bottom:calc(100% + 8px);left:0;background:#0d1b3e;color:#fff;font-size:11px;font-weight:400;padding:8px 12px;border-radius:8px;width:220px;z-index:99;line-height:1.5;pointer-events:none;white-space:normal}
 .alert-tooltip::after{content:'';position:absolute;top:100%;left:14px;border:5px solid transparent;border-top-color:#0d1b3e}
 .alert-badge:hover .alert-tooltip{display:block}
-
-/* ── Estado conciliación ─────────────────── */
-.conc-badge{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:600;padding:3px 8px;border-radius:20px;cursor:pointer;transition:opacity .15s}
+/* ── Conciliación ─────────────────────────── */
+.conc-badge{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:600;padding:3px 8px;border-radius:20px;cursor:pointer;transition:opacity .15s;white-space:nowrap}
 .conc-badge:hover{opacity:.8}
 .conc-pendiente{background:#fff0f0;color:#8b1a1a;border:1px solid #fdc5c5}
 .conc-parcial{background:#fffbec;color:#7a4f00;border:1px solid #fde8a0}
@@ -565,7 +564,7 @@ input[type=file]{display:none}
 <script>
 // ── Estado global ────────────────────────────────────────────
 let APPS_SCRIPT_URL = localStorage.getItem('shoronpo_api_url')||'https://script.google.com/macros/s/AKfycbyecasXGaMuY_TZJkNdjvoTFp7ORd7ynfsJYUeGYpj-K_R2zatwYZRSJjDNnC_JX7In/exec';
-let currentData=[], historico={semanas:[],productos:[]};
+let currentData=[], historico={quincenas:[],productos:[]}, conciliaciones={};
 let activeFilter='all', sortCol='impacto', sortAsc=false, searchTerm='';
 let gaugeInst=null, histInst=null, histOnlyInst=null, scatterInst=null, panelChartInst=null;
 
@@ -880,7 +879,6 @@ function renderAlertas(data){
   const alerts=[];
   const prodHist={};
   historico.productos.forEach(p=>{if(!prodHist[p.producto])prodHist[p.producto]=[];prodHist[p.producto].push(p);});
-  // Solo alertar productos que SIGUEN con desvío elevado ahora
   const elevadosActuales=new Set(data.filter(d=>d.estado==='ELEVADA').map(d=>d.producto));
   Object.entries(prodHist).forEach(([prod,hist])=>{
     if(!elevadosActuales.has(prod)) return;
@@ -906,12 +904,13 @@ function renderAlertas(data){
     }
   }
   if(!alerts.length) alerts.push({type:'good',icon:'🎉',label:'Todo bajo control',tooltip:'No se detectaron alertas críticas en este inventario.'});
-  document.getElementById('alertsGrid').innerHTML=alerts.map(a=>`<div class="alert-badge ${a.type}">${a.icon} ${a.label}<div class="alert-tooltip">${a.tooltip}</div></div>`).join('');
+  const strip=document.getElementById('alertsGrid');
+  strip.className='alerts-strip';
+  strip.innerHTML=alerts.map(a=>`<div class="alert-badge ${a.type}">${a.icon} ${a.label}<div class="alert-tooltip">${a.tooltip}</div></div>`).join('');
   document.getElementById('alertCount').textContent=`(${alerts.length})`;
   document.getElementById('alertsSection').style.display='block';
 }
 
-// ── Treemap ───────────────────────────────────────────────────
 function renderTreemap(data){
   const famImp={};
   data.forEach(d=>{famImp[d.familia]=(famImp[d.familia]||0)+d.impacto;});
@@ -1113,158 +1112,6 @@ function setFilter(f,btn){activeFilter=f;document.querySelectorAll('.fbtn').forE
 function searchDetail(v){searchTerm=v.toLowerCase();renderDetail(currentData);}
 function searchProductos(v){const map={};historico.productos.forEach(p=>{if(!map[p.producto])map[p.producto]={producto:p.producto,familia:p.familia,registros:[]};map[p.producto].registros.push({quincena:p.quincena,fecha:p.fecha,pct:parseFloat(p.pct)||0,impacto:parseFloat(p.impacto)||0,estado:p.estado});});renderProdTable(Object.values(map),v.toLowerCase());}
 function sortTable(col){if(sortCol===col)sortAsc=!sortAsc;else{sortCol=col;sortAsc=false;}renderDetail(currentData);}
-
-// ── Conciliación ──────────────────────────────────────────────
-function getConcKey(producto, semana){
-  return producto+'||'+(semana||'actual');
-}
-
-function getEstadoConc(producto, semana){
-  const key = getConcKey(producto, semana);
-  return conciliaciones[key]||{estado:'PENDIENTE',explicaciones:[]};
-}
-
-function badgeConc(producto, semana){
-  const c = getEstadoConc(producto, semana);
-  const cls = c.estado==='CONCILIADA'?'conc-conciliada':c.estado==='PARCIAL'?'conc-parcial':'conc-pendiente';
-  const lbl = c.estado==='CONCILIADA'?'Conciliada':c.estado==='PARCIAL'?'Parcial':'Pendiente';
-  const icon = c.estado==='CONCILIADA'?'🟢':c.estado==='PARCIAL'?'🟠':'🔴';
-  return `<span class="conc-badge ${cls}" onclick="abrirConciliacion('${producto.replace(/'/g,"\'")}','${semana||'actual'}')">${icon} ${lbl}</span>`;
-}
-
-function abrirConciliacion(producto, semana){
-  const prod = currentData.find(d=>d.producto===producto);
-  if(!prod) return;
-  const key = getConcKey(producto, semana);
-  const conc = conciliaciones[key]||{estado:'PENDIENTE',explicaciones:[]};
-  const desvAbs = Math.abs(prod.desv);
-  const unidad = prod.unidad||'u';
-  const explicado = conc.explicaciones.reduce((s,e)=>s+e.cantidad,0);
-  const pendiente = Math.max(0, desvAbs - explicado);
-
-  const causas = ['Salida no registrada','Entrada no registrada','Producción no cargada',
-    'Producción cargada incorrectamente','Merma no registrada','Movimiento incorrecto',
-    'Error de conteo','Error de unidad','Pérdida física confirmada','Otra causa'];
-
-  const histRows = conc.explicaciones.map((e,i)=>`
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:0.5px solid var(--border);font-size:12px">
-      <span style="color:var(--text2)">${e.causa}</span>
-      <span style="font-weight:600">${e.cantidad} ${unidad}</span>
-    </div>`).join('');
-
-  const pct = desvAbs>0?Math.round(explicado/desvAbs*100):0;
-  const barColor = pct>=100?'#22c55e':pct>0?'#f4a225':'#e63946';
-
-  document.getElementById('panelName').textContent = producto;
-  document.getElementById('panelFamilia').textContent = prod.familia;
-  document.getElementById('panelKpis').innerHTML = `
-    <div class="panel-kpi"><div class="panel-kpi-label">Esperado</div><div class="panel-kpi-val" style="color:var(--blue)">${Math.abs(prod.cantTeo).toFixed(2)} ${unidad}</div></div>
-    <div class="panel-kpi"><div class="panel-kpi-label">Encontrado</div><div class="panel-kpi-val" style="color:var(--red)">${Math.abs(prod.cantReal).toFixed(2)} ${unidad}</div></div>
-    <div class="panel-kpi"><div class="panel-kpi-label">Diferencia</div><div class="panel-kpi-val" style="color:var(--red)">${prod.desv>0?'+':''}${prod.desv.toFixed(2)} ${unidad}</div></div>
-    <div class="panel-kpi"><div class="panel-kpi-label">Valor diferencia</div><div class="panel-kpi-val" style="color:var(--purple)">€${prod.impacto.toFixed(2)}</div></div>
-  `;
-
-  // Conciliation section appended to panel body
-  const concSection = document.createElement('div');
-  concSection.id = 'concSection';
-  concSection.innerHTML = `
-    <div style="margin:16px 0 10px;padding-top:12px;border-top:0.5px solid var(--border)">
-      <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">Investigación y conciliación</div>
-
-      <div style="background:var(--bg);border-radius:8px;padding:12px;margin-bottom:12px;border:0.5px solid var(--border)">
-        <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px">
-          <span style="color:var(--text2)">Diferencia original</span>
-          <span style="font-weight:600">${desvAbs.toFixed(2)} ${unidad}</span>
-        </div>
-        <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px">
-          <span style="color:var(--text2)">Ya explicamos</span>
-          <span style="font-weight:600;color:#f4a225">${explicado.toFixed(2)} ${unidad}</span>
-        </div>
-        <div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden;margin:6px 0">
-          <div style="height:100%;width:${Math.min(100,pct)}%;background:${barColor};border-radius:3px;transition:width .4s"></div>
-        </div>
-        <div style="display:flex;justify-content:space-between;font-size:12px">
-          <span style="color:var(--text2)">Queda por investigar</span>
-          <span style="font-weight:600;color:${pendiente>0?'var(--red)':'#22c55e'}">${pendiente.toFixed(2)} ${unidad}</span>
-        </div>
-      </div>
-
-      ${histRows?`<div style="margin-bottom:10px">${histRows}</div>`:''}
-
-      ${pendiente>0?`
-      <div style="background:var(--surface2);border:0.5px solid var(--border);border-radius:8px;padding:12px">
-        <div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:8px">Agregar explicación</div>
-        <div style="margin-bottom:8px">
-          <label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">Causa</label>
-          <select id="concCausa" style="width:100%;font-size:12px;padding:6px 8px;border:0.5px solid var(--border2);border-radius:6px;background:var(--surface)">
-            <option value="">Seleccionar causa...</option>
-            ${causas.map(c=>`<option>${c}</option>`).join('')}
-          </select>
-        </div>
-        <div style="margin-bottom:8px">
-          <label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">Cantidad (máx. ${pendiente.toFixed(2)} ${unidad})</label>
-          <div style="display:flex;align-items:center;gap:8px">
-            <input id="concCantidad" type="number" min="0.01" max="${pendiente.toFixed(2)}" step="0.01" placeholder="0.00" style="width:90px;font-size:12px;padding:6px 8px;border:0.5px solid var(--border2);border-radius:6px;background:var(--surface)">
-            <span style="font-size:12px;color:var(--text3)">${unidad}</span>
-          </div>
-        </div>
-        <div style="margin-bottom:10px">
-          <label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">Comentario (opcional)</label>
-          <textarea id="concComentario" rows="2" style="width:100%;font-size:12px;padding:6px 8px;border:0.5px solid var(--border2);border-radius:6px;background:var(--surface);resize:none"></textarea>
-        </div>
-        <div id="concError" style="font-size:11px;color:var(--red);margin-bottom:6px;display:none"></div>
-        <button onclick="guardarExplicacion('${producto.replace(/'/g,"\'")}','${semana}')" style="width:100%;padding:8px;font-size:12px;font-weight:600;border-radius:6px;border:none;background:var(--blue);color:#fff;cursor:pointer">Agregar explicación</button>
-      </div>`:'<div style="text-align:center;padding:12px;font-size:12px;color:#22c55e;font-weight:600">✓ Diferencia completamente explicada</div>'}
-    </div>`;
-
-  // Remove old conc section if exists
-  const old = document.getElementById('concSection');
-  if(old) old.remove();
-  document.getElementById('panelBody').appendChild(concSection);
-
-  document.getElementById('panelOverlay').style.display='block';
-  document.getElementById('panel').style.display='block';
-}
-
-function guardarExplicacion(producto, semana){
-  const causa = document.getElementById('concCausa')?.value;
-  const cantStr = document.getElementById('concCantidad')?.value;
-  const comentario = document.getElementById('concComentario')?.value||'';
-  const errEl = document.getElementById('concError');
-
-  if(!causa){errEl.textContent='Seleccioná una causa.';errEl.style.display='block';return;}
-  const cant = parseFloat(cantStr);
-  if(!cant||cant<=0){errEl.textContent='Ingresá una cantidad válida.';errEl.style.display='block';return;}
-
-  const prod = currentData.find(d=>d.producto===producto);
-  if(!prod) return;
-  const key = getConcKey(producto, semana);
-  if(!conciliaciones[key]) conciliaciones[key]={estado:'PENDIENTE',explicaciones:[]};
-  const conc = conciliaciones[key];
-  const desvAbs = Math.abs(prod.desv);
-  const explicado = conc.explicaciones.reduce((s,e)=>s+e.cantidad,0);
-  const pendiente = desvAbs - explicado;
-
-  if(cant > pendiente+0.01){errEl.textContent=`No podés explicar más de ${pendiente.toFixed(2)} ${prod.unidad||'u'}.`;errEl.style.display='block';return;}
-
-  conc.explicaciones.push({causa, cantidad:cant, comentario, fecha:new Date().toISOString()});
-  const nuevoExplicado = conc.explicaciones.reduce((s,e)=>s+e.cantidad,0);
-  const nuevoPendiente = Math.max(0, desvAbs - nuevoExplicado);
-  conc.estado = nuevoPendiente<=0.01?'CONCILIADA':nuevoExplicado>0?'PARCIAL':'PENDIENTE';
-
-  // Save to localStorage
-  localStorage.setItem('shoronpo_conc', JSON.stringify(conciliaciones));
-
-  // Refresh panel
-  abrirConciliacion(producto, semana);
-  // Refresh detail table
-  if(currentData.length) renderDetail(currentData);
-}
-
-// Load conciliaciones from localStorage
-function loadConciliaciones(){
-  try{ const s=localStorage.getItem('shoronpo_conc'); if(s) conciliaciones=JSON.parse(s); }catch(e){}
-}
 
 // ── Nav ───────────────────────────────────────────────────────
 function showView(id,tab){
@@ -1566,6 +1413,148 @@ function showLoading(txt){document.getElementById('loadingText').textContent=txt
 function hideLoading(){document.getElementById('loadingOverlay').classList.remove('show');}
 
 // ── Auto-conectar al iniciar ──────────────────────────────────
+// ── Conciliación ──────────────────────────────────────────────
+function loadConciliaciones(){
+  try{const s=localStorage.getItem('shoronpo_conc');if(s) conciliaciones=JSON.parse(s);}catch(e){}
+}
+
+function saveConciliaciones(){
+  try{localStorage.setItem('shoronpo_conc',JSON.stringify(conciliaciones));}catch(e){}
+}
+
+function getConcKey(producto, semana){
+  return producto+'||'+(semana||'actual');
+}
+
+function getEstadoConc(producto, semana){
+  const key=getConcKey(producto,semana);
+  return conciliaciones[key]||{estado:'PENDIENTE',explicaciones:[]};
+}
+
+function badgeConc(producto, semana){
+  const c=getEstadoConc(producto,semana);
+  const cls=c.estado==='CONCILIADA'?'conc-conciliada':c.estado==='PARCIAL'?'conc-parcial':'conc-pendiente';
+  const lbl=c.estado==='CONCILIADA'?'Conciliada':c.estado==='PARCIAL'?'Parcial':'Pendiente';
+  const icon=c.estado==='CONCILIADA'?'🟢':c.estado==='PARCIAL'?'🟠':'🔴';
+  return `<span class="conc-badge ${cls}" onclick="abrirConciliacion('${producto.replace(/'/g,"\'")}','${semana||'actual'}')">${icon} ${lbl}</span>`;
+}
+
+function abrirConciliacion(producto, semana){
+  const prod=currentData.find(d=>d.producto===producto);
+  if(!prod) return;
+  const key=getConcKey(producto,semana);
+  if(!conciliaciones[key]) conciliaciones[key]={estado:'PENDIENTE',explicaciones:[]};
+  const conc=conciliaciones[key];
+  const desvAbs=Math.abs(prod.desv);
+  const unidad=prod.unidad||'u';
+  const explicado=conc.explicaciones.reduce((s,e)=>s+e.cantidad,0);
+  const pendiente=Math.max(0,desvAbs-explicado);
+  const pct=desvAbs>0?Math.round(Math.min(100,explicado/desvAbs*100)):0;
+  const barColor=pct>=100?'#22c55e':pct>0?'#f4a225':'#e63946';
+
+  document.getElementById('panelName').textContent=producto;
+  document.getElementById('panelFamilia').textContent=prod.familia;
+  document.getElementById('panelKpis').innerHTML=`
+    <div class="panel-kpi"><div class="panel-kpi-label">Esperado</div><div class="panel-kpi-val" style="color:var(--blue)">${Math.abs(prod.cantTeo).toFixed(2)} ${unidad}</div></div>
+    <div class="panel-kpi"><div class="panel-kpi-label">Encontrado</div><div class="panel-kpi-val" style="color:var(--red)">${Math.abs(prod.cantReal).toFixed(2)} ${unidad}</div></div>
+    <div class="panel-kpi"><div class="panel-kpi-label">Diferencia</div><div class="panel-kpi-val" style="color:var(--red)">${prod.desv>0?'+':''}${prod.desv.toFixed(2)} ${unidad}</div></div>
+    <div class="panel-kpi"><div class="panel-kpi-label">Valor diferencia</div><div class="panel-kpi-val" style="color:var(--purple)">€${prod.impacto.toFixed(2)}</div></div>`;
+
+  const causas=['Salida no registrada','Entrada no registrada','Producción no cargada',
+    'Producción cargada incorrectamente','Merma no registrada','Movimiento incorrecto',
+    'Error de conteo','Error de unidad','Pérdida física confirmada','Otra causa'];
+
+  const histRows=conc.explicaciones.map(e=>`
+    <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:0.5px solid var(--border);font-size:12px">
+      <span style="color:var(--text2)">${e.causa}</span>
+      <span style="font-weight:600">${e.cantidad.toFixed(2)} ${unidad}</span>
+    </div>`).join('');
+
+  const concSection=document.createElement('div');
+  concSection.id='concSection';
+  concSection.innerHTML=`
+    <div style="margin:16px 0 10px;padding-top:12px;border-top:0.5px solid var(--border)">
+      <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">Investigación y conciliación</div>
+      <div style="background:var(--bg);border-radius:8px;padding:12px;margin-bottom:10px;border:0.5px solid var(--border)">
+        <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:5px">
+          <span style="color:var(--text2)">Diferencia original</span>
+          <span style="font-weight:600">${desvAbs.toFixed(2)} ${unidad}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px">
+          <span style="color:var(--text2)">Ya explicamos</span>
+          <span style="font-weight:600;color:#f4a225">${explicado.toFixed(2)} ${unidad}</span>
+        </div>
+        <div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden;margin-bottom:6px">
+          <div style="height:100%;width:${pct}%;background:${barColor};border-radius:3px"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:12px">
+          <span style="color:var(--text2)">Queda por investigar</span>
+          <span style="font-weight:600;color:${pendiente>0.01?'var(--red)':'#22c55e'}">${pendiente.toFixed(2)} ${unidad}</span>
+        </div>
+      </div>
+      ${histRows?`<div style="margin-bottom:10px">${histRows}</div>`:''}
+      ${pendiente>0.01?`
+      <div style="background:var(--surface2);border:0.5px solid var(--border);border-radius:8px;padding:12px">
+        <div style="font-size:12px;font-weight:600;margin-bottom:8px">Agregar explicación</div>
+        <div style="margin-bottom:8px">
+          <label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">Causa</label>
+          <select id="concCausa" style="width:100%;font-size:12px;padding:6px 8px;border:0.5px solid var(--border2);border-radius:6px;background:var(--surface)">
+            <option value="">Seleccionar causa...</option>
+            ${causas.map(c=>`<option>${c}</option>`).join('')}
+          </select>
+        </div>
+        <div style="margin-bottom:8px">
+          <label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">Cantidad (máx. ${pendiente.toFixed(2)} ${unidad})</label>
+          <div style="display:flex;align-items:center;gap:8px">
+            <input id="concCantidad" type="number" min="0.01" max="${pendiente.toFixed(2)}" step="0.01" placeholder="0.00" style="width:90px;font-size:12px;padding:6px 8px;border:0.5px solid var(--border2);border-radius:6px;background:var(--surface)">
+            <span style="font-size:12px;color:var(--text3)">${unidad}</span>
+          </div>
+        </div>
+        <div style="margin-bottom:10px">
+          <label style="font-size:11px;color:var(--text2);display:block;margin-bottom:3px">Comentario (opcional)</label>
+          <textarea id="concComentario" rows="2" style="width:100%;font-size:12px;padding:6px 8px;border:0.5px solid var(--border2);border-radius:6px;background:var(--surface);resize:none;box-sizing:border-box"></textarea>
+        </div>
+        <div id="concError" style="font-size:11px;color:var(--red);margin-bottom:6px;display:none"></div>
+        <button onclick="guardarExplicacion('${producto.replace(/'/g,"\'")}','${semana}')" style="width:100%;padding:8px;font-size:12px;font-weight:600;border-radius:6px;border:none;background:#1877F2;color:#fff;cursor:pointer">Agregar explicación</button>
+      </div>`
+      :'<div style="text-align:center;padding:12px;font-size:13px;color:#22c55e;font-weight:600">✓ Diferencia completamente explicada</div>'}
+    </div>`;
+
+  const old=document.getElementById('concSection');
+  if(old) old.remove();
+  document.getElementById('panelBody').appendChild(concSection);
+  document.getElementById('panelOverlay').style.display='block';
+  document.getElementById('panel').style.display='block';
+  document.getElementById('panel').classList.add('panel-enter');
+}
+
+function guardarExplicacion(producto, semana){
+  const causa=document.getElementById('concCausa')?.value;
+  const cantStr=document.getElementById('concCantidad')?.value;
+  const comentario=document.getElementById('concComentario')?.value||'';
+  const errEl=document.getElementById('concError');
+  if(errEl) errEl.style.display='none';
+  if(!causa){if(errEl){errEl.textContent='Seleccioná una causa.';errEl.style.display='block';}return;}
+  const cant=parseFloat(cantStr);
+  if(!cant||cant<=0){if(errEl){errEl.textContent='Ingresá una cantidad válida.';errEl.style.display='block';}return;}
+  const prod=currentData.find(d=>d.producto===producto);
+  if(!prod) return;
+  const key=getConcKey(producto,semana);
+  if(!conciliaciones[key]) conciliaciones[key]={estado:'PENDIENTE',explicaciones:[]};
+  const conc=conciliaciones[key];
+  const desvAbs=Math.abs(prod.desv);
+  const explicado=conc.explicaciones.reduce((s,e)=>s+e.cantidad,0);
+  const pendiente=desvAbs-explicado;
+  if(cant>pendiente+0.01){if(errEl){errEl.textContent=`No podés explicar más de ${pendiente.toFixed(2)} ${prod.unidad||'u'}.`;errEl.style.display='block';}return;}
+  conc.explicaciones.push({causa,cantidad:cant,comentario,fecha:new Date().toISOString()});
+  const nuevoExplicado=conc.explicaciones.reduce((s,e)=>s+e.cantidad,0);
+  const nuevoPendiente=Math.max(0,desvAbs-nuevoExplicado);
+  conc.estado=nuevoPendiente<=0.01?'CONCILIADA':nuevoExplicado>0?'PARCIAL':'PENDIENTE';
+  saveConciliaciones();
+  abrirConciliacion(producto,semana);
+  renderDetail(currentData);
+}
+
 // Auto-conectar al iniciar
 loadConciliaciones();
 testConnection();
