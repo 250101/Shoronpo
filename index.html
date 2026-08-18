@@ -1089,11 +1089,20 @@ function renderProdTable(prods,search=''){
     const trendColor=trend.startsWith('↑')?'var(--red)':trend.startsWith('↓')?'var(--green)':'var(--text3)';
     const pill=last.estado==='ELEVADA'?'p-red':last.estado==='LEVE'?'p-amber':'p-green';
     const lab=last.estado==='ELEVADA'?'Elevada':last.estado==='LEVE'?'Leve':'Coincide';
+    const keyLast=p.producto+'||'+last.quincena;
+    const concLast=conciliaciones[keyLast]||{estado:'PENDIENTE',explicaciones:[]};
+    let estadoCell=`<span class="pill ${pill}">${lab}</span>`;
+    if(last.estado!=='COINCIDE'){
+      const concCls=concLast.estado==='CONCILIADA'?'conc-conciliada':concLast.estado==='PARCIAL'?'conc-parcial':'conc-pendiente';
+      const concIcon=concLast.estado==='CONCILIADA'?'🟢':concLast.estado==='PARCIAL'?'🟠':'🔴';
+      const concLbl=concLast.estado==='CONCILIADA'?'Conciliada':concLast.estado==='PARCIAL'?'Parcial':'Pendiente';
+      estadoCell+=` <span class="conc-badge ${concCls}" style="font-size:10px">${concIcon} ${concLbl}</span>`;
+    }
     return `<tr><td style="font-weight:700;cursor:pointer;color:var(--blue)" onclick="openPanel('${p.producto.replace(/'/g,"\\'")}') ">${p.producto}</td>
       <td>${p.familia}</td><td><span class="pill p-blue">${regs.length}</span></td>
       <td>${(avgPct*100).toFixed(1)}%</td><td style="font-weight:600">€${impAcum.toFixed(0)}</td>
       <td style="font-weight:600;color:${trendColor}">${trend}</td>
-      <td><span class="pill ${pill}">${lab}</span></td></tr>`;
+      <td>${estadoCell}</td></tr>`;
   }).join('')||'<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:1.5rem">Sin resultados</td></tr>';
 }
 
@@ -1103,32 +1112,129 @@ function openPanel(nombre){
   const cur=currentData.find(d=>d.producto===nombre);
   document.getElementById('panelName').textContent=nombre;
   document.getElementById('panelFamilia').textContent=hist[0]?.familia||cur?.familia||'—';
-  const allRegs=[...hist.map(p=>({quincena:p.quincena,fecha:p.fecha,pct:parseFloat(p.pct)||0,impacto:parseFloat(p.impacto)||0,estado:p.estado}))];
+
+  // Enriquecer registros con estado de conciliación
+  const allRegs=[...hist.map(p=>{
+    const key=p.producto+'||'+p.quincena;
+    const conc=conciliaciones[key]||{estado:'PENDIENTE',explicaciones:[]};
+    return {
+      quincena:p.quincena, fecha:p.fecha,
+      pct:parseFloat(p.pct)||0, impacto:parseFloat(p.impacto)||0,
+      estado:p.estado, concEstado:conc.estado,
+      explicaciones:conc.explicaciones
+    };
+  })];
+
+  // Agregar semana actual si existe y no está en histórico
+  if(cur){
+    const keyActual=cur.producto+'||actual';
+    const concActual=conciliaciones[keyActual]||{estado:'PENDIENTE',explicaciones:[]};
+    if(!allRegs.find(r=>r.quincena==='Actual')){
+      allRegs.push({
+        quincena:'Actual', fecha:new Date().toISOString(),
+        pct:cur.pct, impacto:cur.impacto,
+        estado:cur.estado, concEstado:concActual.estado,
+        explicaciones:concActual.explicaciones
+      });
+    }
+  }
+
   const sorted=[...allRegs].sort((a,b)=>new Date(a.fecha||0)-new Date(b.fecha||0));
   const elevadas=allRegs.filter(r=>r.estado==='ELEVADA').length;
+  const conciliadas=allRegs.filter(r=>r.concEstado==='CONCILIADA').length;
   const impAcum=allRegs.reduce((s,r)=>s+r.impacto,0);
   const avgPct=allRegs.reduce((s,r)=>s+Math.abs(r.pct),0)/allRegs.length;
+
   document.getElementById('panelKpis').innerHTML=`
     <div class="panel-kpi"><div class="panel-kpi-label">Registros</div><div class="panel-kpi-val" style="color:var(--blue)">${allRegs.length}</div></div>
     <div class="panel-kpi"><div class="panel-kpi-label">Desvíos elevados</div><div class="panel-kpi-val" style="color:var(--red)">${elevadas}</div></div>
-    <div class="panel-kpi"><div class="panel-kpi-label">Impacto acumulado</div><div class="panel-kpi-val" style="color:var(--purple)">€${impAcum.toFixed(0)}</div></div>
+    <div class="panel-kpi"><div class="panel-kpi-label">Conciliados</div><div class="panel-kpi-val" style="color:#22c55e">${conciliadas}</div></div>
     <div class="panel-kpi"><div class="panel-kpi-label">% Desv. prom.</div><div class="panel-kpi-val" style="color:var(--amber)">${(avgPct*100).toFixed(1)}%</div></div>`;
+
+  // Color de puntos según conciliación: verde=conciliado, amarillo=parcial, rojo=pendiente, gris=coincide
+  function puntColor(r){
+    if(r.estado==='COINCIDE') return '#22c55e';
+    if(r.concEstado==='CONCILIADA') return '#22c55e';
+    if(r.concEstado==='PARCIAL') return '#f4a225';
+    return r.estado==='ELEVADA'?'#e63946':'#f4a225';
+  }
+
+  // Borde del punto más grueso si está conciliado
+  function puntRadius(r){
+    return r.concEstado==='CONCILIADA'?7:5;
+  }
+
   const ctx=document.getElementById('panelChart').getContext('2d');
   if(panelChartInst) panelChartInst.destroy();
   panelChartInst=new Chart(ctx,{type:'line',data:{
     labels:sorted.map(r=>r.quincena),
-    datasets:[{label:'% Desviación',data:sorted.map(r=>parseFloat((r.pct*100).toFixed(2))),
-      borderColor:'var(--blue)',backgroundColor:'rgba(24,119,242,.1)',fill:true,tension:.4,pointRadius:5,pointHoverRadius:8,
-      pointBackgroundColor:sorted.map(r=>r.estado==='ELEVADA'?'#e63946':r.estado==='LEVE'?'#f4a225':'#22c55e')}]},
-    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},
-      tooltip:{callbacks:{label:c=>`${c.parsed.y.toFixed(2)}%`}}},
-      scales:{x:{grid:{display:false},ticks:{color:'var(--text3)',font:{size:10}}},
-        y:{grid:{color:'var(--border)'},ticks:{color:'var(--text3)',font:{size:10}}}}}});
-  document.getElementById('panelBody').innerHTML=[...sorted].reverse().map(r=>{
+    datasets:[{
+      label:'% Desviación',
+      data:sorted.map(r=>parseFloat((r.pct*100).toFixed(2))),
+      borderColor:'rgba(24,119,242,.4)',
+      backgroundColor:'rgba(24,119,242,.05)',
+      fill:true, tension:.4,
+      pointRadius:sorted.map(r=>puntRadius(r)),
+      pointHoverRadius:9,
+      pointBackgroundColor:sorted.map(r=>puntColor(r)),
+      pointBorderColor:sorted.map(r=>r.concEstado==='CONCILIADA'?'#22c55e':'rgba(24,119,242,.4)'),
+      pointBorderWidth:sorted.map(r=>r.concEstado==='CONCILIADA'?2:1),
+    }]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},
+        tooltip:{callbacks:{
+          label:c=>{
+            const r=sorted[c.dataIndex];
+            const concLbl=r.concEstado==='CONCILIADA'?' ✓ Conciliada':r.concEstado==='PARCIAL'?' ◑ Parcial':r.estado!=='COINCIDE'?' ○ Pendiente':'';
+            return `${c.parsed.y.toFixed(2)}%${concLbl}`;
+          }
+        }}},
+      scales:{
+        x:{grid:{display:false},ticks:{color:'var(--text3)',font:{size:10}}},
+        y:{grid:{color:'var(--border)'},ticks:{color:'var(--text3)',font:{size:10}}}
+      }
+    }});
+
+  // Leyenda del gráfico
+  const legendHtml=`
+    <div style="display:flex;gap:12px;font-size:10px;color:var(--text3);margin-top:4px;margin-bottom:12px;flex-wrap:wrap">
+      <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#22c55e;margin-right:4px;vertical-align:middle"></span>Conciliado / Coincide</span>
+      <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#f4a225;margin-right:4px;vertical-align:middle"></span>Parcial / Leve</span>
+      <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#e63946;margin-right:4px;vertical-align:middle"></span>Pendiente / Elevada</span>
+    </div>`;
+
+  // Tabla histórica con estado de conciliación
+  const tablaRows=[...sorted].reverse().map(r=>{
     const pill=r.estado==='ELEVADA'?'p-red':r.estado==='LEVE'?'p-amber':'p-green';
     const lab=r.estado==='ELEVADA'?'Elevada':r.estado==='LEVE'?'Leve':'Coincide';
-    return `<tr><td>${r.quincena}</td><td>${(r.pct>=0?'+':'')+(r.pct*100).toFixed(1)}%</td><td>€${r.impacto.toFixed(2)}</td><td><span class="pill ${pill}">${lab}</span></td></tr>`;
+    let concCell='<span style="color:var(--text3);font-size:11px">—</span>';
+    if(r.estado!=='COINCIDE'){
+      const concCls=r.concEstado==='CONCILIADA'?'conc-conciliada':r.concEstado==='PARCIAL'?'conc-parcial':'conc-pendiente';
+      const concIcon=r.concEstado==='CONCILIADA'?'🟢':r.concEstado==='PARCIAL'?'🟠':'🔴';
+      const concLbl=r.concEstado==='CONCILIADA'?'Conciliada':r.concEstado==='PARCIAL'?'Parcial':'Pendiente';
+      concCell=`<span class="conc-badge ${concCls}">${concIcon} ${concLbl}</span>`;
+    }
+    return `<tr>
+      <td>${r.quincena}</td>
+      <td>${(r.pct>=0?'+':'')+(r.pct*100).toFixed(1)}%</td>
+      <td>€${r.impacto.toFixed(2)}</td>
+      <td><span class="pill ${pill}">${lab}</span></td>
+      <td>${concCell}</td>
+    </tr>`;
   }).join('');
+
+  // Rebuild panel body preserving concSection if open
+  const panelBody=document.getElementById('panelBody');
+  const oldConc=document.getElementById('concSection');
+  panelBody.innerHTML=legendHtml+`
+    <table class="panel-hist-table" style="width:100%">
+      <thead><tr>
+        <th>Semana</th><th>% Desv.</th><th>Impacto €</th><th>Desvío</th><th>Investigación</th>
+      </tr></thead>
+      <tbody>${tablaRows}</tbody>
+    </table>`;
+  if(oldConc) panelBody.appendChild(oldConc);
+
   document.getElementById('panelOverlay').style.display='block';
   document.getElementById('panel').style.display='block';
   document.getElementById('panel').classList.add('panel-enter');
@@ -1609,6 +1715,11 @@ function guardarExplicacion(producto, semana){
     renderTop5(currentData);
     renderAlertas(currentData);
     renderDetail(currentData);
+  }
+  // Refresh panel chart if open for this product
+  const panelNameEl=document.getElementById('panelName');
+  if(panelNameEl&&panelNameEl.textContent===producto){
+    openPanel(producto);
   }
   abrirConciliacion(producto,semana);
 }
