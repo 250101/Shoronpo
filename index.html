@@ -564,7 +564,7 @@ input[type=file]{display:none}
 <script>
 // ── Estado global ────────────────────────────────────────────
 let APPS_SCRIPT_URL = localStorage.getItem('shoronpo_api_url')||'https://script.google.com/macros/s/AKfycbyecasXGaMuY_TZJkNdjvoTFp7ORd7ynfsJYUeGYpj-K_R2zatwYZRSJjDNnC_JX7In/exec';
-let currentData=[], historico={quincenas:[],productos:[]}, conciliaciones={}, currentSemana=null;
+let currentData=[], historico={quincenas:[],productos:[]}, conciliaciones={};
 let activeFilter='all', sortCol='impacto', sortAsc=false, searchTerm='';
 let gaugeInst=null, histInst=null, histOnlyInst=null, scatterInst=null, panelChartInst=null;
 
@@ -621,12 +621,6 @@ async function fetchHistorico(){
     const d=await jsonpCall(APPS_SCRIPT_URL+'?action=get');
     if(d.ok){
       historico=d;
-      // Load conciliaciones from Sheets if available
-      if(d.conciliaciones){
-        // Merge Sheets conciliaciones with localStorage (Sheets wins)
-        conciliaciones={...conciliaciones,...d.conciliaciones};
-        saveConciliaciones();
-      }
       renderHistPreview();
       renderNavVisibility();
       renderCompararSelector();
@@ -1131,9 +1125,8 @@ function openPanel(nombre){
     };
   })];
 
-  // Solo agregar punto "Actual" si el inventario NO está guardado en histórico todavía
-  // Si currentSemana != null, es una semana ya guardada - no duplicar
-  if(cur && !currentSemana){
+  // Agregar semana actual si existe y no está en histórico
+  if(cur){
     const keyActual=cur.producto+'||actual';
     const concActual=conciliaciones[keyActual]||{estado:'PENDIENTE',explicaciones:[]};
     if(!allRegs.find(r=>r.quincena==='Actual')){
@@ -1382,7 +1375,7 @@ async function processFile(file){
   try{
     const data=await parseXLSX(file);
     if(!data.length){showNotice('No se encontraron productos.','err');return;}
-    currentData=data;currentSemana=null;activeFilter='all';sortCol='impacto';sortAsc=false;searchTerm='';
+    currentData=data;activeFilter='all';sortCol='impacto';sortAsc=false;searchTerm='';
     document.querySelectorAll('.fbtn').forEach(b=>b.className='fbtn');
     const allBtn=document.querySelector('.fbtn');if(allBtn) allBtn.classList.add('f-all');
     renderAll();
@@ -1411,7 +1404,6 @@ function actualizarSelectorSemana(){
 function cambiarSemanaVista(semana){
   const prods=historico.productos.filter(p=>p.quincena===semana);
   if(!prods.length){showNotice('No hay datos para esta semana.','err');return;}
-  currentSemana=semana; // Track which semana we're viewing
   currentData=prods.map(p=>({
     familia:p.familia, producto:p.producto, unidad:p.unidad||'',
     cantTeo:parseFloat(p.cantTeo)||0, cantReal:parseFloat(p.cantReal)||0,
@@ -1597,8 +1589,7 @@ function getEstadoConc(producto, semana){
 }
 
 function badgeConc(producto, semana){
-  const effectiveSemana=semana==='actual'&&currentSemana?currentSemana:semana;
-  const c=getEstadoConc(producto,effectiveSemana);
+  const c=getEstadoConc(producto,semana);
   const cls=c.estado==='CONCILIADA'?'conc-conciliada':c.estado==='PARCIAL'?'conc-parcial':'conc-pendiente';
   const lbl=c.estado==='CONCILIADA'?'Conciliada':c.estado==='PARCIAL'?'Parcial':'Pendiente';
   const icon=c.estado==='CONCILIADA'?'🟢':c.estado==='PARCIAL'?'🟠':'🔴';
@@ -1608,9 +1599,7 @@ function badgeConc(producto, semana){
 function abrirConciliacion(producto, semana){
   const prod=currentData.find(d=>d.producto===producto);
   if(!prod) return;
-  // Use the actual semana name if viewing a saved semana
-  const effectiveSemana=semana==='actual'&&currentSemana?currentSemana:semana;
-  const key=getConcKey(producto,effectiveSemana);
+  const key=getConcKey(producto,semana);
   if(!conciliaciones[key]) conciliaciones[key]={estado:'PENDIENTE',explicaciones:[]};
   const conc=conciliaciones[key];
   const desvAbs=Math.abs(prod.desv);
@@ -1713,18 +1702,13 @@ function guardarExplicacion(producto, semana){
   const desvAbs=Math.abs(prod.desv);
   const explicado=conc.explicaciones.reduce((s,e)=>s+e.cantidad,0);
   const pendiente=desvAbs-explicado;
-  if(cant>pendiente+0.01){if(errEl){errEl.textContent=`No podés explicar más de ${pendiente.toFixed(2)} ${prod.unidad||'u'}.`;errEl.style.display='block';}return;}
-  conc.explicaciones.push({causa,cantidad:cant,comentario,fecha:new Date().toISOString()});
+  const cantR=Math.round(cant*100)/100, pendienteR=Math.round(pendiente*100)/100;
+  if(cantR>pendienteR){if(errEl){errEl.textContent=`No podés explicar más de ${pendienteR.toFixed(2)} ${prod.unidad||'u'}.`;errEl.style.display='block';}return;}
+  conc.explicaciones.push({causa,cantidad:cantR,comentario,fecha:new Date().toISOString()});
   const nuevoExplicado=conc.explicaciones.reduce((s,e)=>s+e.cantidad,0);
   const nuevoPendiente=Math.max(0,desvAbs-nuevoExplicado);
   conc.estado=nuevoPendiente<=0.01?'CONCILIADA':nuevoExplicado>0?'PARCIAL':'PENDIENTE';
   saveConciliaciones();
-  // Save to Sheets in background (non-blocking)
-  if(APPS_SCRIPT_URL){
-    const concPayload={action:'saveConc',conciliaciones:conciliaciones};
-    const encoded=encodeURIComponent(JSON.stringify(concPayload));
-    jsonpCall(APPS_SCRIPT_URL+'?action=saveConc&payload='+encoded).catch(()=>{});
-  }
   // Refresh all views that show conciliation impact
   if(currentData.length){
     renderGauge(calcHealth(currentData));
