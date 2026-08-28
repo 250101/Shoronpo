@@ -622,8 +622,11 @@ async function fetchHistorico(){
     if(d.ok){
       historico=d;
       if(d.conciliaciones && Object.keys(d.conciliaciones).length>0){
+        console.log('Conciliaciones cargadas desde Sheets:',Object.keys(d.conciliaciones).length,'entradas');
         conciliaciones=d.conciliaciones;
         saveConciliaciones();
+      } else {
+        console.log('No hay conciliaciones en Sheets todavía');
       }
       renderHistPreview();
       renderNavVisibility();
@@ -1716,7 +1719,7 @@ function guardarExplicacion(producto, semana){
   if(APPS_SCRIPT_URL){
     try{
       const encoded=encodeURIComponent(JSON.stringify({conciliaciones:conciliaciones}));
-      jsonpCall(APPS_SCRIPT_URL+'?action=saveConc&payload='+encoded).catch(()=>{});
+      jsonpCall(APPS_SCRIPT_URL+'?action=saveConc&payload='+encoded).then(r=>console.log('saveConc:',r)).catch(e=>console.error('saveConc error:',e));
     }catch(e){}
   }
   // Refresh all views that show conciliation impact
