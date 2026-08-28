@@ -621,6 +621,10 @@ async function fetchHistorico(){
     const d=await jsonpCall(APPS_SCRIPT_URL+'?action=get');
     if(d.ok){
       historico=d;
+      if(d.conciliaciones && Object.keys(d.conciliaciones).length>0){
+        conciliaciones=d.conciliaciones;
+        saveConciliaciones();
+      }
       renderHistPreview();
       renderNavVisibility();
       renderCompararSelector();
@@ -1709,6 +1713,12 @@ function guardarExplicacion(producto, semana){
   const nuevoPendiente=Math.max(0,desvAbs-nuevoExplicado);
   conc.estado=nuevoPendiente<=0.01?'CONCILIADA':nuevoExplicado>0?'PARCIAL':'PENDIENTE';
   saveConciliaciones();
+  if(APPS_SCRIPT_URL){
+    try{
+      const encoded=encodeURIComponent(JSON.stringify({conciliaciones:conciliaciones}));
+      jsonpCall(APPS_SCRIPT_URL+'?action=saveConc&payload='+encoded).catch(()=>{});
+    }catch(e){}
+  }
   // Refresh all views that show conciliation impact
   if(currentData.length){
     renderGauge(calcHealth(currentData));
