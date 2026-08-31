@@ -362,7 +362,14 @@ input[type=file]{display:none}
         <div id="scatterCard"><canvas id="scatterChart"></canvas></div>
       </div>
       <div class="card card-full" id="histCard" style="display:none">
-        <div class="card-title">Evolución histórica por semana <span style="font-weight:400">orden cronológico</span></div>
+        <div class="card-title">Evolución histórica por semana
+          <span style="font-weight:400;font-size:11px">orden cronológico</span>
+          <div id="histNavWrap" style="display:flex;align-items:center;gap:8px">
+            <button onclick="histScroll(-1)" style="font-size:11px;padding:3px 8px;border-radius:4px;border:0.5px solid var(--border);background:var(--surface);cursor:pointer">←</button>
+            <span id="histNavLabel" style="font-size:11px;color:var(--text3)"></span>
+            <button onclick="histScroll(1)" style="font-size:11px;padding:3px 8px;border-radius:4px;border:0.5px solid var(--border);background:var(--surface);cursor:pointer">→</button>
+          </div>
+        </div>
         <div class="chart-wrap"><canvas id="histChart"></canvas></div>
       </div>
       <div class="actions" id="execActions">
@@ -974,17 +981,39 @@ function renderScatter(data){
 }
 
 // ── Histórico chart ───────────────────────────────────────────
+let histOffset=0;
+const HIST_PAGE=8;
+
+function histScroll(dir){
+  const sorted=[...historico.quincenas].sort((a,b)=>new Date(a.fecha)-new Date(b.fecha));
+  const total=sorted.length;
+  histOffset=Math.max(0,Math.min(histOffset+dir*HIST_PAGE, Math.max(0,total-HIST_PAGE)));
+  renderHistChart();
+}
+
 function renderHistChart(){
   if(!historico.quincenas.length){document.getElementById('histCard').style.display='none';return;}
   const sorted=[...historico.quincenas].sort((a,b)=>new Date(a.fecha)-new Date(b.fecha));
+  const total=sorted.length;
+
+  // Always show last HIST_PAGE semanas by default
+  if(histOffset===0 && total>HIST_PAGE) histOffset=Math.max(0,total-HIST_PAGE);
+  const slice=sorted.slice(histOffset, histOffset+HIST_PAGE);
+
+  // Update nav label
+  const navLabel=document.getElementById('histNavLabel');
+  if(navLabel){
+    navLabel.textContent=total<=HIST_PAGE?`${total} semanas`:`${histOffset+1}–${Math.min(histOffset+HIST_PAGE,total)} de ${total}`;
+  }
+
   const ctx=document.getElementById('histChart').getContext('2d');
   if(histInst) histInst.destroy();
   histInst=new Chart(ctx,{type:'bar',data:{
-    labels:sorted.map(q=>q.quincena),
+    labels:slice.map(q=>q.quincena),
     datasets:[
-      {label:'Elevada',data:sorted.map(q=>parseInt(q.elevada)||0),backgroundColor:'rgba(230,57,70,.8)',borderRadius:4,stack:'s'},
-      {label:'Leve',data:sorted.map(q=>parseInt(q.leve)||0),backgroundColor:'rgba(244,162,37,.8)',borderRadius:4,stack:'s'},
-      {label:'Coincide',data:sorted.map(q=>parseInt(q.coincide)||0),backgroundColor:'rgba(34,197,94,.8)',borderRadius:4,stack:'s'},
+      {label:'Elevada',data:slice.map(q=>parseInt(q.elevada)||0),backgroundColor:'rgba(230,57,70,.8)',borderRadius:4,stack:'s'},
+      {label:'Leve',data:slice.map(q=>parseInt(q.leve)||0),backgroundColor:'rgba(244,162,37,.8)',borderRadius:4,stack:'s'},
+      {label:'Coincide',data:slice.map(q=>parseInt(q.coincide)||0),backgroundColor:'rgba(34,197,94,.8)',borderRadius:4,stack:'s'},
     ]},
     options:{responsive:true,maintainAspectRatio:false,
       plugins:{legend:{position:'bottom',labels:{font:{size:11},boxWidth:10,padding:16}}},
@@ -1033,7 +1062,7 @@ function renderDetail(data){
     const lab=d.estado==='ELEVADA'?'Elevada':d.estado==='LEVE'?'Leve':'Coincide';
     const hist=prodHist[d.producto]||[];
     const histBadge=hist.length>0?`<span class="pill p-blue" style="cursor:pointer" onclick="openPanel('${d.producto.replace(/'/g,"\\'")}')">📊 ${hist.length} reg.</span>`:'<span style="color:var(--text3);font-size:11px">—</span>';
-    const concBadge=d.estado!=='COINCIDE'?badgeConc(d.producto,'actual'):'<span style="color:var(--text3);font-size:11px">—</span>';
+    const concBadge=d.estado!=='COINCIDE'?badgeConc(d.producto,currentSemana||'actual'):'<span style="color:var(--text3);font-size:11px">—</span>';
     return `<tr><td style="font-weight:600">${d.producto}</td><td>${d.familia}</td><td>${d.unidad}</td>
       <td>${d.cantTeo.toFixed(2)}</td><td>${d.cantReal.toFixed(2)}</td>
       <td><span class="dot ${dot}"></span>${pct}</td>
@@ -1299,7 +1328,7 @@ function renderTop5(data){
         const veces=prodHist[d.producto]||0;
         const recur=veces>=2?`<span class="pill p-red">🔁 ${veces}x</span>`:veces===1?`<span class="pill p-amber">1x</span>`:'<span style="color:var(--text3);font-size:11px">Nuevo</span>';
         const pct=(d.pct>=0?'+':'')+(d.pct*100).toFixed(1)+'%';
-        const key=d.producto+'||actual';
+        const key=concKey(d.producto);
         const conc=conciliaciones[key]||{estado:'PENDIENTE',explicaciones:[]};
         const desvAbs=Math.abs(d.desv);
         const expCant=conc.explicaciones.reduce((s,e)=>s+e.cantidad,0);
@@ -1596,7 +1625,8 @@ function getEstadoConc(producto, semana){
 }
 
 function badgeConc(producto, semana){
-  const c=getEstadoConc(producto,semana);
+  const effectiveSemana=semana||currentSemana||'actual';
+  const c=getEstadoConc(producto,effectiveSemana);
   const cls=c.estado==='CONCILIADA'?'conc-conciliada':c.estado==='PARCIAL'?'conc-parcial':'conc-pendiente';
   const lbl=c.estado==='CONCILIADA'?'Conciliada':c.estado==='PARCIAL'?'Parcial':'Pendiente';
   const icon=c.estado==='CONCILIADA'?'🟢':c.estado==='PARCIAL'?'🟠':'🔴';
@@ -1718,9 +1748,12 @@ function guardarExplicacion(producto, semana){
   saveConciliaciones();
   if(APPS_SCRIPT_URL){
     try{
-      const encoded=encodeURIComponent(JSON.stringify({conciliaciones:conciliaciones}));
-      jsonpCall(APPS_SCRIPT_URL+'?action=saveConc&payload='+encoded).then(r=>console.log('saveConc:',r)).catch(e=>console.error('saveConc error:',e));
-    }catch(e){}
+      const payload={conciliaciones:conciliaciones};
+      const encoded=encodeURIComponent(JSON.stringify(payload));
+      jsonpCall(APPS_SCRIPT_URL+'?action=saveConc&payload='+encoded)
+        .then(r=>console.log('saveConc OK:',r))
+        .catch(e=>console.error('saveConc error:',e));
+    }catch(e){console.error('saveConc exception:',e);}
   }
   // Refresh all views that show conciliation impact
   if(currentData.length){
@@ -1745,7 +1778,7 @@ function getConcResumen(data){
   const pendientes=[], parciales=[], conciliadas=[];
   data.forEach(d=>{
     if(d.estado==='COINCIDE') return;
-    const key=d.producto+'||actual';
+    const key=concKey(d.producto);
     const conc=conciliaciones[key]||{estado:'PENDIENTE',explicaciones:[]};
     if(conc.estado==='CONCILIADA') conciliadas.push(d);
     else if(conc.estado==='PARCIAL') parciales.push(d);
@@ -1759,7 +1792,7 @@ function getImpactoConc(data){
   let sinExplicar=0, explicado=0;
   data.forEach(d=>{
     if(d.estado==='COINCIDE') return;
-    const key=d.producto+'||actual';
+    const key=concKey(d.producto);
     const conc=conciliaciones[key]||{estado:'PENDIENTE',explicaciones:[]};
     const desvAbs=Math.abs(d.desv);
     const expCant=conc.explicaciones.reduce((s,e)=>s+e.cantidad,0);
