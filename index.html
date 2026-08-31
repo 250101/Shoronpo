@@ -1612,46 +1612,56 @@ function hideLoading(){document.getElementById('loadingOverlay').classList.remov
 // ── Auto-conectar al iniciar ──────────────────────────────────
 // ── Conciliación ──────────────────────────────────────────────
 function syncConcToSheets(){
+  // Legacy: sync all rows at once (fallback only)
   if(!APPS_SCRIPT_URL) return;
-  try{
-    // Build flat rows for Sheets - one row per explanation
-    const rows=[];
-    Object.entries(conciliaciones).forEach(([key, conc])=>{
-      const parts=key.split('||');
-      const producto=parts[0];
-      const semana=parts[1]||'';
-      const prod=currentData.find(d=>d.producto===producto);
-      const familia=prod?prod.familia:'';
-      const unidad=prod?prod.unidad:'';
-      (conc.explicaciones||[]).forEach(e=>{
-        rows.push({
-          semana, producto, familia,
-          causa:e.causa||'',
-          cantidad:e.cantidad||0,
-          unidad:e.unidad||unidad,
-          comentario:e.comentario||'',
-          fecha:e.fecha||''
-        });
-      });
+  const rows=[];
+  Object.entries(conciliaciones).forEach(([key,conc])=>{
+    const parts=key.split('||');
+    const producto=parts[0], semana=parts[1]||'';
+    const prod=currentData.find(d=>d.producto===producto);
+    (conc.explicaciones||[]).forEach(e=>{
+      rows.push({semana,producto,familia:prod?prod.familia:'',
+        causa:e.causa||'',cantidad:e.cantidad||0,
+        unidad:e.unidad||(prod?prod.unidad:''),
+        comentario:e.comentario||'',fecha:e.fecha||''});
     });
-    const payload=JSON.stringify({rows});
-    const encoded=encodeURIComponent(payload);
-    jsonpCall(APPS_SCRIPT_URL+'?action=saveConc&payload='+encoded)
-      .then(r=>{
-        if(r&&r.ok){
-          showNotice('Guardado en Sheets: '+r.message,'ok');
-        } else {
-          showNotice('Error al guardar en Sheets.','err');
-          console.warn('Sheets error:',r);
-        }
-      })
-      .catch(e=>{
-        showNotice('No se pudo conectar con Sheets.','err');
-        console.error('Sheets error:',e);
-      });
-  }catch(e){console.error('syncConcToSheets:',e);}
+  });
+  const encoded=encodeURIComponent(JSON.stringify({rows}));
+  jsonpCall(APPS_SCRIPT_URL+'?action=saveConc&payload='+encoded)
+    .then(r=>{ if(r&&r.ok) console.log('Sync OK:',r.message); })
+    .catch(()=>{});
 }
 
+function addExpToSheets(semana, producto, explicacion){
+  if(!APPS_SCRIPT_URL) return;
+  const prod=currentData.find(d=>d.producto===producto);
+  const row={
+    semana: semana||currentSemana||'actual',
+    producto,
+    familia: prod?prod.familia:'',
+    causa: explicacion.causa||'',
+    cantidad: explicacion.cantidad||0,
+    unidad: explicacion.unidad||(prod?prod.unidad:''),
+    comentario: explicacion.comentario||'',
+    fecha: explicacion.fecha||new Date().toISOString()
+  };
+  const encoded=encodeURIComponent(JSON.stringify(row));
+  jsonpCall(APPS_SCRIPT_URL+'?action=addExp&payload='+encoded)
+    .then(r=>{
+      if(r&&r.ok) showNotice('Guardado en Sheets.','ok');
+      else { showNotice('Error Sheets: '+(r&&r.error),'err'); console.warn(r); }
+    })
+    .catch(e=>{ showNotice('No se pudo conectar con Sheets.','err'); console.error(e); });
+}
+
+function delExpFromSheets(semana, producto, exp){
+  if(!APPS_SCRIPT_URL) return;
+  const row={semana:semana||currentSemana||'actual', producto, causa:exp.causa, fecha:exp.fecha||''};
+  const encoded=encodeURIComponent(JSON.stringify(row));
+  jsonpCall(APPS_SCRIPT_URL+'?action=delExp&payload='+encoded)
+    .then(r=>{ if(r&&r.ok) console.log('Borrado de Sheets.'); })
+    .catch(()=>{});
+}
 function loadConciliaciones(){
   try{const s=localStorage.getItem('shoronpo_conc');if(s) conciliaciones=JSON.parse(s);}catch(e){}
 }
@@ -1793,7 +1803,9 @@ function guardarExplicacion(producto, semana){
   const nuevoPendiente=Math.max(0,desvAbs-nuevoExplicado);
   conc.estado=nuevoPendiente<=0.01?'CONCILIADA':nuevoExplicado>0?'PARCIAL':'PENDIENTE';
   saveConciliaciones();
-  syncConcToSheets();
+  // Send only this new explanation to Sheets (tiny payload)
+  const newExp=conc.explicaciones[conc.explicaciones.length-1];
+  addExpToSheets(effectiveSemana||semana, producto, newExp);
   // Refresh all views that show conciliation impact
   if(currentData.length){
     renderGauge(calcHealth(currentData));
@@ -1814,7 +1826,7 @@ function guardarExplicacion(producto, semana){
 function borrarExplicacion(producto, semana, idx){
   const key=getConcKey(producto,semana);
   if(!conciliaciones[key]) return;
-  conciliaciones[key].explicaciones.splice(idx,1);
+  const removedExp=conciliaciones[key].explicaciones.splice(idx,1)[0];
   // Recalculate estado
   const prod=currentData.find(d=>d.producto===producto);
   if(prod){
@@ -1824,7 +1836,8 @@ function borrarExplicacion(producto, semana, idx){
     conciliaciones[key].estado=pendiente<=0.01?'CONCILIADA':expCant>0?'PARCIAL':'PENDIENTE';
   }
   saveConciliaciones();
-  syncConcToSheets();
+  // Delete this specific row from Sheets
+  delExpFromSheets(semana, producto, removedExp);
   if(currentData.length){
     renderGauge(calcHealth(currentData));
     renderKPIs(currentData);
