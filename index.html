@@ -1370,7 +1370,7 @@ async function cerrarQuincena(){
     const fecha=new Date().toISOString(),loteSize=10;
     for(let i=0;i<currentData.length;i+=loteSize){
       const lote=currentData.slice(i,i+loteSize);
-      const payload={action:'save',semana:q,fecha,productos:lote,primerLote:i===0};
+      const payload={action:'save',quincena:q,fecha,productos:lote,primerLote:i===0};
       const encoded=encodeURIComponent(JSON.stringify(payload));
       const d=await jsonpCall(APPS_SCRIPT_URL+'?action=save&payload='+encoded);
       if(!d.ok) throw new Error(d.error||'Error al guardar');
