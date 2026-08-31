@@ -1614,34 +1614,41 @@ function hideLoading(){document.getElementById('loadingOverlay').classList.remov
 function syncConcToSheets(){
   if(!APPS_SCRIPT_URL) return;
   try{
-    // Enrich explicaciones with product data before sending
-    const enriched={};
+    // Build flat rows for Sheets - one row per explanation
+    const rows=[];
     Object.entries(conciliaciones).forEach(([key, conc])=>{
       const parts=key.split('||');
       const producto=parts[0];
       const semana=parts[1]||'';
       const prod=currentData.find(d=>d.producto===producto);
-      enriched[key]={
-        estado: conc.estado,
-        explicaciones: (conc.explicaciones||[]).map(e=>({
-          ...e,
-          familia: prod?prod.familia:'',
-          unidad: prod?prod.unidad:''
-        }))
-      };
+      const familia=prod?prod.familia:'';
+      const unidad=prod?prod.unidad:'';
+      (conc.explicaciones||[]).forEach(e=>{
+        rows.push({
+          semana, producto, familia,
+          causa:e.causa||'',
+          cantidad:e.cantidad||0,
+          unidad:e.unidad||unidad,
+          comentario:e.comentario||'',
+          fecha:e.fecha||''
+        });
+      });
     });
-    const payload=JSON.stringify({conciliaciones:enriched});
+    const payload=JSON.stringify({rows});
     const encoded=encodeURIComponent(payload);
     jsonpCall(APPS_SCRIPT_URL+'?action=saveConc&payload='+encoded)
       .then(r=>{
         if(r&&r.ok){
-          console.log('Sheets OK:',r.message);
-          showNotice('Conciliación guardada en Sheets.','ok');
+          showNotice('Guardado en Sheets: '+r.message,'ok');
         } else {
+          showNotice('Error al guardar en Sheets.','err');
           console.warn('Sheets error:',r);
         }
       })
-      .catch(e=>console.error('Sheets error:',e));
+      .catch(e=>{
+        showNotice('No se pudo conectar con Sheets.','err');
+        console.error('Sheets error:',e);
+      });
   }catch(e){console.error('syncConcToSheets:',e);}
 }
 
@@ -1695,10 +1702,13 @@ function abrirConciliacion(producto, semana){
     'Producción cargada incorrectamente','Merma no registrada','Movimiento incorrecto',
     'Error de conteo','Error de unidad','Pérdida física confirmada','Otra causa'];
 
-  const histRows=conc.explicaciones.map(e=>`
-    <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:0.5px solid var(--border);font-size:12px">
-      <span style="color:var(--text2)">${e.causa}</span>
-      <span style="font-weight:600">${e.cantidad.toFixed(2)} ${unidad}</span>
+  const histRows=conc.explicaciones.map((e,i)=>`
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:0.5px solid var(--border);font-size:12px">
+      <div><span style="color:var(--text2)">${e.causa}</span>${e.comentario?`<div style="font-size:10px;color:var(--text3);margin-top:1px">${e.comentario}</div>`:''}</div>
+      <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+        <span style="font-weight:600">${e.cantidad.toFixed(2)} ${unidad}</span>
+        <button onclick="borrarExplicacion('${producto.replace(/'/g,"\\'")}','${semana}',${i})" style="font-size:10px;padding:2px 6px;border-radius:4px;border:0.5px solid var(--red-b);background:var(--red-bg);color:var(--red-text);cursor:pointer">✕</button>
+      </div>
     </div>`).join('');
 
   const concSection=document.createElement('div');
@@ -1800,6 +1810,30 @@ function guardarExplicacion(producto, semana){
   abrirConciliacion(producto,semana);
 }
 
+
+function borrarExplicacion(producto, semana, idx){
+  const key=getConcKey(producto,semana);
+  if(!conciliaciones[key]) return;
+  conciliaciones[key].explicaciones.splice(idx,1);
+  // Recalculate estado
+  const prod=currentData.find(d=>d.producto===producto);
+  if(prod){
+    const desvAbs=Math.abs(prod.desv);
+    const expCant=conciliaciones[key].explicaciones.reduce((s,e)=>s+e.cantidad,0);
+    const pendiente=Math.max(0,desvAbs-expCant);
+    conciliaciones[key].estado=pendiente<=0.01?'CONCILIADA':expCant>0?'PARCIAL':'PENDIENTE';
+  }
+  saveConciliaciones();
+  syncConcToSheets();
+  if(currentData.length){
+    renderGauge(calcHealth(currentData));
+    renderKPIs(currentData);
+    renderTop5(currentData);
+    renderAlertas(currentData);
+    renderDetail(currentData);
+  }
+  abrirConciliacion(producto,semana);
+}
 
 // ── Helpers de conciliación ────────────────────────────────────
 function concKey(producto){ return producto+'||'+(currentSemana||'actual'); }
