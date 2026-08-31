@@ -621,12 +621,10 @@ async function fetchHistorico(){
     const d=await jsonpCall(APPS_SCRIPT_URL+'?action=get');
     if(d.ok){
       historico=d;
+      // Load conciliaciones from Sheets silently - merge with localStorage
       if(d.conciliaciones && Object.keys(d.conciliaciones).length>0){
-        console.log('Conciliaciones cargadas desde Sheets:',Object.keys(d.conciliaciones).length,'entradas');
-        conciliaciones=d.conciliaciones;
+        conciliaciones={...conciliaciones,...d.conciliaciones};
         saveConciliaciones();
-      } else {
-        console.log('No hay conciliaciones en Sheets todavía');
       }
       renderHistPreview();
       renderNavVisibility();
@@ -974,17 +972,29 @@ function renderScatter(data){
 }
 
 // ── Histórico chart ───────────────────────────────────────────
+let histOffset=0;
+const HIST_PAGE=8;
+function histScroll(dir){
+  const total=historico.quincenas.length;
+  histOffset=Math.max(0,Math.min(histOffset+dir*HIST_PAGE,Math.max(0,total-HIST_PAGE)));
+  renderHistChart();
+}
 function renderHistChart(){
   if(!historico.quincenas.length){document.getElementById('histCard').style.display='none';return;}
   const sorted=[...historico.quincenas].sort((a,b)=>new Date(a.fecha)-new Date(b.fecha));
+  const total=sorted.length;
+  if(total>HIST_PAGE && histOffset===0) histOffset=Math.max(0,total-HIST_PAGE);
+  const slice=sorted.slice(histOffset,histOffset+HIST_PAGE);
+  const navLabel=document.getElementById('histNavLabel');
+  if(navLabel) navLabel.textContent=total<=HIST_PAGE?total+' semanas':(histOffset+1)+'–'+Math.min(histOffset+HIST_PAGE,total)+' de '+total;
   const ctx=document.getElementById('histChart').getContext('2d');
   if(histInst) histInst.destroy();
   histInst=new Chart(ctx,{type:'bar',data:{
-    labels:sorted.map(q=>q.quincena),
+    labels:slice.map(q=>q.quincena),
     datasets:[
-      {label:'Elevada',data:sorted.map(q=>parseInt(q.elevada)||0),backgroundColor:'rgba(230,57,70,.8)',borderRadius:4,stack:'s'},
-      {label:'Leve',data:sorted.map(q=>parseInt(q.leve)||0),backgroundColor:'rgba(244,162,37,.8)',borderRadius:4,stack:'s'},
-      {label:'Coincide',data:sorted.map(q=>parseInt(q.coincide)||0),backgroundColor:'rgba(34,197,94,.8)',borderRadius:4,stack:'s'},
+      {label:'Elevada',data:slice.map(q=>parseInt(q.elevada)||0),backgroundColor:'rgba(230,57,70,.8)',borderRadius:4,stack:'s'},
+      {label:'Leve',data:slice.map(q=>parseInt(q.leve)||0),backgroundColor:'rgba(244,162,37,.8)',borderRadius:4,stack:'s'},
+      {label:'Coincide',data:slice.map(q=>parseInt(q.coincide)||0),backgroundColor:'rgba(34,197,94,.8)',borderRadius:4,stack:'s'},
     ]},
     options:{responsive:true,maintainAspectRatio:false,
       plugins:{legend:{position:'bottom',labels:{font:{size:11},boxWidth:10,padding:16}}},
@@ -1578,6 +1588,17 @@ function hideLoading(){document.getElementById('loadingOverlay').classList.remov
 
 // ── Auto-conectar al iniciar ──────────────────────────────────
 // ── Conciliación ──────────────────────────────────────────────
+function syncConcToSheets(){
+  if(!APPS_SCRIPT_URL) return;
+  try{
+    const payload=JSON.stringify({conciliaciones:conciliaciones});
+    const encoded=encodeURIComponent(payload);
+    jsonpCall(APPS_SCRIPT_URL+'?action=saveConc&payload='+encoded)
+      .then(r=>{ if(r&&r.ok) console.log('Conciliaciones sincronizadas con Sheets'); })
+      .catch(()=>{});
+  }catch(e){}
+}
+
 function loadConciliaciones(){
   try{const s=localStorage.getItem('shoronpo_conc');if(s) conciliaciones=JSON.parse(s);}catch(e){}
 }
@@ -1716,12 +1737,7 @@ function guardarExplicacion(producto, semana){
   const nuevoPendiente=Math.max(0,desvAbs-nuevoExplicado);
   conc.estado=nuevoPendiente<=0.01?'CONCILIADA':nuevoExplicado>0?'PARCIAL':'PENDIENTE';
   saveConciliaciones();
-  if(APPS_SCRIPT_URL){
-    try{
-      const encoded=encodeURIComponent(JSON.stringify({conciliaciones:conciliaciones}));
-      jsonpCall(APPS_SCRIPT_URL+'?action=saveConc&payload='+encoded).then(r=>console.log('saveConc:',r)).catch(e=>console.error('saveConc error:',e));
-    }catch(e){}
-  }
+  syncConcToSheets();
   // Refresh all views that show conciliation impact
   if(currentData.length){
     renderGauge(calcHealth(currentData));
