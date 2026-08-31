@@ -630,7 +630,23 @@ async function fetchHistorico(){
       historico=d;
       // Load conciliaciones from Sheets silently - merge with localStorage
       if(d.conciliaciones && Object.keys(d.conciliaciones).length>0){
-        conciliaciones={...conciliaciones,...d.conciliaciones};
+        // Merge Sheets data with localStorage
+        // Recalculate estado based on current historico
+        const sheetConc=d.conciliaciones;
+        Object.entries(sheetConc).forEach(([key,conc])=>{
+          // Find product desvAbs from historico
+          const parts=key.split('||');
+          const producto=parts[0];
+          const semana=parts[1];
+          const histProd=historico.productos.find(p=>p.producto===producto&&p.quincena===semana);
+          if(histProd){
+            const desvAbs=Math.abs(parseFloat(histProd.desv)||0);
+            const expCant=(conc.explicaciones||[]).reduce((s,e)=>s+(e.cantidad||0),0);
+            const pendiente=Math.max(0,desvAbs-expCant);
+            conc.estado=pendiente<=0.01?'CONCILIADA':expCant>0?'PARCIAL':'PENDIENTE';
+          }
+        });
+        conciliaciones={...conciliaciones,...sheetConc};
         saveConciliaciones();
       }
       renderHistPreview();
@@ -1598,12 +1614,35 @@ function hideLoading(){document.getElementById('loadingOverlay').classList.remov
 function syncConcToSheets(){
   if(!APPS_SCRIPT_URL) return;
   try{
-    const payload=JSON.stringify({conciliaciones:conciliaciones});
+    // Enrich explicaciones with product data before sending
+    const enriched={};
+    Object.entries(conciliaciones).forEach(([key, conc])=>{
+      const parts=key.split('||');
+      const producto=parts[0];
+      const semana=parts[1]||'';
+      const prod=currentData.find(d=>d.producto===producto);
+      enriched[key]={
+        estado: conc.estado,
+        explicaciones: (conc.explicaciones||[]).map(e=>({
+          ...e,
+          familia: prod?prod.familia:'',
+          unidad: prod?prod.unidad:''
+        }))
+      };
+    });
+    const payload=JSON.stringify({conciliaciones:enriched});
     const encoded=encodeURIComponent(payload);
     jsonpCall(APPS_SCRIPT_URL+'?action=saveConc&payload='+encoded)
-      .then(r=>{ if(r&&r.ok) console.log('Conciliaciones sincronizadas con Sheets'); })
-      .catch(()=>{});
-  }catch(e){}
+      .then(r=>{
+        if(r&&r.ok){
+          console.log('Sheets OK:',r.message);
+          showNotice('Conciliación guardada en Sheets.','ok');
+        } else {
+          console.warn('Sheets error:',r);
+        }
+      })
+      .catch(e=>console.error('Sheets error:',e));
+  }catch(e){console.error('syncConcToSheets:',e);}
 }
 
 function loadConciliaciones(){
