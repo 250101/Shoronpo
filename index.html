@@ -1693,7 +1693,8 @@ function abrirConciliacion(producto, semana){
   const key=getConcKey(producto,semana);
   if(!conciliaciones[key]) conciliaciones[key]={estado:'PENDIENTE',explicaciones:[]};
   const conc=conciliaciones[key];
-  const desvAbs=Math.abs(prod.desv);
+  // Use cantTeo-cantReal for desvAbs since desv can be 0 due to parsing
+  const desvAbs=Math.abs(prod.desv)||Math.abs(prod.cantTeo-prod.cantReal);
   const unidad=prod.unidad||'u';
   const explicado=conc.explicaciones.reduce((s,e)=>s+e.cantidad,0);
   const pendiente=Math.max(0,desvAbs-explicado);
@@ -1830,7 +1831,7 @@ function borrarExplicacion(producto, semana, idx){
   // Recalculate estado
   const prod=currentData.find(d=>d.producto===producto);
   if(prod){
-    const desvAbs=Math.abs(prod.desv);
+    const desvAbs=Math.abs(prod.desv)||Math.abs(prod.cantTeo-prod.cantReal);
     const expCant=conciliaciones[key].explicaciones.reduce((s,e)=>s+e.cantidad,0);
     const pendiente=Math.max(0,desvAbs-expCant);
     conciliaciones[key].estado=pendiente<=0.01?'CONCILIADA':expCant>0?'PARCIAL':'PENDIENTE';
@@ -1872,7 +1873,7 @@ function getImpactoConc(data){
     if(d.estado==='COINCIDE') return;
     const key=d.producto+'||actual';
     const conc=conciliaciones[key]||{estado:'PENDIENTE',explicaciones:[]};
-    const desvAbs=Math.abs(d.desv);
+    const desvAbs=Math.abs(d.desv)||Math.abs(d.cantTeo-d.cantReal);
     const expCant=conc.explicaciones.reduce((s,e)=>s+e.cantidad,0);
     const pctExp=desvAbs>0?Math.min(1,expCant/desvAbs):0;
     explicado+=d.impacto*pctExp;
