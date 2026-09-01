@@ -570,12 +570,15 @@ input[type=file]{display:none}
 
 <script>
 // ── Estado global ────────────────────────────────────────────
-let APPS_SCRIPT_URL = localStorage.getItem('shoronpo_api_url')||'https://script.google.com/macros/s/AKfycbxECH6LKxoisJbsF2VyaYtYLrKLwifxp0794B9PbRW4E835njz3CHc1BlLs-pwsg2Ti/exec';
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwG2DVgSsp8_AXufgi0LB1-fNJQ7P53ItjJWA0xhZBYImC7KYioocX-ibcZO5DWngFB/exec';
 let currentData=[], historico={quincenas:[],productos:[]}, conciliaciones={}, currentSemana=null;
 let activeFilter='all', sortCol='impacto', sortAsc=false, searchTerm='';
 let gaugeInst=null, histInst=null, histOnlyInst=null, scatterInst=null, panelChartInst=null;
 
 document.getElementById('apiUrl').value = APPS_SCRIPT_URL;
+// Evita que una URL antigua guardada por una versión previa vuelva a imponerse.
+localStorage.removeItem('shoronpo_api_url');
+console.log('[Shoronpo] APPS_SCRIPT_URL:', APPS_SCRIPT_URL);
 
 // ── JSONP ────────────────────────────────────────────────────
 function jsonpCall(url){
@@ -585,7 +588,7 @@ function jsonpCall(url){
     const cleanup=()=>{try{delete window[cb];s.remove();}catch(e){}};
     const t=setTimeout(()=>{cleanup();rej(new Error('Tiempo de espera agotado.'));},20000);
     window[cb]=(d)=>{clearTimeout(t);cleanup();res(d);};
-    s.src=url+(url.includes('?')?'&':'?')+'callback='+cb;
+    s.src=url+(url.includes('?')?'&':'?')+'callback='+cb+'&_ts='+Date.now();
     document.body.appendChild(s);
   });
 }
@@ -601,8 +604,6 @@ async function retryConnection(){
 
 async function testConnection(){
   if(!APPS_SCRIPT_URL){showNotice('Pegá la URL del Apps Script primero.','err');return;}
-  APPS_SCRIPT_URL=APPS_SCRIPT_URL.trim().split('?')[0];
-  localStorage.setItem('shoronpo_api_url',APPS_SCRIPT_URL);
   document.getElementById('apiUrl').value=APPS_SCRIPT_URL;
   const dot=document.getElementById('connDot');
   dot.className='conn-dot loading';
@@ -643,7 +644,7 @@ async function fetchHistorico(){
         }
       });
       conciliaciones=sheetConc;
-      saveConciliaciones();
+      saveConciliaciones(); // caché local; Sheets sigue siendo la fuente de verdad
       renderHistPreview();
       renderNavVisibility();
       renderCompararSelector();
@@ -1672,21 +1673,32 @@ function buildAllRows(){
   return rows;
 }
 
-function addExpToSheets(semana, producto, exp){
-  if(!APPS_SCRIPT_URL) return;
-  const encoded=encodeURIComponent(JSON.stringify({rows:buildAllRows()}));
-  jsonpCall(APPS_SCRIPT_URL+'?action=saveConc&payload='+encoded)
-    .then(r=>{ if(r&&r.ok) showNotice('Guardado en Sheets.','ok');
-               else showNotice('Error guardando en Sheets.','err'); })
-    .catch(()=>showNotice('Sin conexión con Sheets.','err'));
+async function addExpToSheets(semana, producto, exp){
+  if(!APPS_SCRIPT_URL) throw new Error('API no configurada');
+  const prod=currentData.find(d=>d.producto===producto);
+  const histProd=historico.productos.find(p=>p.producto===producto&&p.quincena===semana);
+  const row={
+    id:exp.id, semana, producto,
+    familia:prod?.familia||histProd?.familia||'',
+    causa:exp.causa||'', cantidad:exp.cantidad||0,
+    unidad:exp.unidad||prod?.unidad||histProd?.unidad||'',
+    comentario:exp.comentario||'', fecha:exp.fecha||''
+  };
+  const encoded=encodeURIComponent(JSON.stringify(row));
+  const r=await jsonpCall(APPS_SCRIPT_URL+'?action=addConc&payload='+encoded);
+  if(!r||!r.ok) throw new Error(r?.error||'No se pudo guardar en Sheets');
+  return r;
 }
 
-function delExpFromSheets(semana, producto, exp){
-  if(!APPS_SCRIPT_URL) return;
-  const encoded=encodeURIComponent(JSON.stringify({rows:buildAllRows()}));
-  jsonpCall(APPS_SCRIPT_URL+'?action=saveConc&payload='+encoded)
-    .then(r=>{ if(r&&r.ok) showNotice('Explicación eliminada.','ok'); })
-    .catch(()=>{});
+async function delExpFromSheets(semana, producto, exp){
+  if(!APPS_SCRIPT_URL) throw new Error('API no configurada');
+  const encoded=encodeURIComponent(JSON.stringify({
+    id:exp.id||'', semana, producto, causa:exp.causa||'',
+    cantidad:exp.cantidad||0, fecha:exp.fecha||''
+  }));
+  const r=await jsonpCall(APPS_SCRIPT_URL+'?action=deleteConc&payload='+encoded);
+  if(!r||!r.ok) throw new Error(r?.error||'No se pudo eliminar de Sheets');
+  return r;
 }
 
 function loadConciliaciones(){
@@ -1808,7 +1820,7 @@ function abrirConciliacion(producto, semana){
   document.getElementById('panel').classList.add('panel-enter');
 }
 
-function guardarExplicacion(producto, semana){
+async function guardarExplicacion(producto, semana){
   const causa=document.getElementById('concCausa')?.value;
   const cantStr=document.getElementById('concCantidad')?.value;
   const comentario=document.getElementById('concComentario')?.value||'';
@@ -1834,14 +1846,26 @@ function guardarExplicacion(producto, semana){
     if(errEl){errEl.textContent=`No podés explicar más de ${pendienteR.toFixed(2)} ${prod.unidad||'u'}.`;errEl.style.display='block';}
     return;
   }
-  const exp={causa,cantidad:cantR,comentario,fecha:new Date().toISOString()};
+  const exp={
+    id:(crypto.randomUUID?crypto.randomUUID():'conc-'+Date.now()+'-'+Math.random().toString(16).slice(2)),
+    causa,cantidad:cantR,unidad:prod.unidad||'',comentario,fecha:new Date().toISOString()
+  };
   conc.explicaciones.push(exp);
   const nuevoExplicado=conc.explicaciones.reduce((s,e)=>s+e.cantidad,0);
   const nuevoPendiente=Math.max(0,desvAbs-nuevoExplicado);
   conc.estado=nuevoPendiente<=0.01?'CONCILIADA':nuevoExplicado>0?'PARCIAL':'PENDIENTE';
   saveConciliaciones();
-  // FIX 3: use realSemana (not effectiveSemana which was undefined)
-  addExpToSheets(realSemana, producto, exp);
+  try{
+    await addExpToSheets(realSemana, producto, exp);
+    showNotice('Explicación guardada en Sheets.','ok');
+  }catch(e){
+    // Revertir la interfaz si Sheets no confirmó el guardado.
+    conc.explicaciones=conc.explicaciones.filter(item=>item.id!==exp.id);
+    const rollbackTotal=conc.explicaciones.reduce((s,e)=>s+e.cantidad,0);
+    conc.estado=rollbackTotal>0?'PARCIAL':'PENDIENTE';
+    saveConciliaciones();
+    showNotice('No se guardó la explicación: '+e.message,'err');
+  }
   if(currentData.length){
     renderGauge(calcHealth(currentData));
     renderKPIs(currentData);
@@ -1855,7 +1879,7 @@ function guardarExplicacion(producto, semana){
 }
 
 
-function borrarExplicacion(producto, semana, idx){
+async function borrarExplicacion(producto, semana, idx){
   const key=getConcKey(producto,semana);
   if(!conciliaciones[key]) return;
   const removedExp=conciliaciones[key].explicaciones.splice(idx,1)[0];
@@ -1868,8 +1892,20 @@ function borrarExplicacion(producto, semana, idx){
     conciliaciones[key].estado=pendiente<=0.01?'CONCILIADA':expCant>0?'PARCIAL':'PENDIENTE';
   }
   saveConciliaciones();
-  // Delete this specific row from Sheets
-  delExpFromSheets(semana, producto, removedExp);
+  try{
+    await delExpFromSheets(semana, producto, removedExp);
+    showNotice('Explicación eliminada de Sheets.','ok');
+  }catch(e){
+    // Restaurar en su posición si Sheets no confirmó la eliminación.
+    conciliaciones[key].explicaciones.splice(idx,0,removedExp);
+    if(prod){
+      const desvAbs=Math.abs(prod.desv)||Math.abs(prod.cantTeo-prod.cantReal);
+      const expCant=conciliaciones[key].explicaciones.reduce((s,item)=>s+item.cantidad,0);
+      conciliaciones[key].estado=Math.max(0,desvAbs-expCant)<=0.01?'CONCILIADA':'PARCIAL';
+    }
+    saveConciliaciones();
+    showNotice('No se eliminó la explicación: '+e.message,'err');
+  }
   if(currentData.length){
     renderGauge(calcHealth(currentData));
     renderKPIs(currentData);
@@ -1888,7 +1924,7 @@ function getConcResumen(data){
   const pendientes=[], parciales=[], conciliadas=[];
   data.forEach(d=>{
     if(d.estado==='COINCIDE') return;
-    const key=d.producto+'||actual';
+    const key=concKey(d.producto);
     const conc=conciliaciones[key]||{estado:'PENDIENTE',explicaciones:[]};
     if(conc.estado==='CONCILIADA') conciliadas.push(d);
     else if(conc.estado==='PARCIAL') parciales.push(d);
@@ -1902,7 +1938,7 @@ function getImpactoConc(data){
   let sinExplicar=0, explicado=0;
   data.forEach(d=>{
     if(d.estado==='COINCIDE') return;
-    const key=d.producto+'||actual';
+    const key=concKey(d.producto);
     const conc=conciliaciones[key]||{estado:'PENDIENTE',explicaciones:[]};
     const desvAbs=Math.abs(d.desv)||Math.abs(d.cantTeo-d.cantReal);
     const expCant=conc.explicaciones.reduce((s,e)=>s+e.cantidad,0);
@@ -1914,7 +1950,6 @@ function getImpactoConc(data){
 }
 
 // Auto-conectar al iniciar
-loadConciliaciones();
 testConnection();
 </script>
 </body>
