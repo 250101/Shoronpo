@@ -571,7 +571,7 @@ input[type=file]{display:none}
 <script>
 // ── Estado global ────────────────────────────────────────────
 let APPS_SCRIPT_URL = localStorage.getItem('shoronpo_api_url')||'https://script.google.com/macros/s/AKfycbyecasXGaMuY_TZJkNdjvoTFp7ORd7ynfsJYUeGYpj-K_R2zatwYZRSJjDNnC_JX7In/exec';
-let currentData=[], historico={quincenas:[],productos:[]}, conciliaciones={};
+let currentData=[], historico={quincenas:[],productos:[]}, conciliaciones={}, currentSemana=null;
 let activeFilter='all', sortCol='impacto', sortAsc=false, searchTerm='';
 let gaugeInst=null, histInst=null, histOnlyInst=null, scatterInst=null, panelChartInst=null;
 
@@ -1150,6 +1150,7 @@ function renderProdTable(prods,search=''){
 function openPanel(nombre){
   const hist=historico.productos.filter(p=>p.producto===nombre);
   const cur=currentData.find(d=>d.producto===nombre);
+  if(!window.panelOffset) window.panelOffset={};
   document.getElementById('panelName').textContent=nombre;
   document.getElementById('panelFamilia').textContent=hist[0]?.familia||cur?.familia||'—';
 
@@ -1206,19 +1207,26 @@ function openPanel(nombre){
 
   const ctx=document.getElementById('panelChart').getContext('2d');
   if(panelChartInst) panelChartInst.destroy();
+  // Show last 8 entries max, with navigation
+  const PANEL_PAGE=8;
+  if(!window.panelOffset) window.panelOffset={};
+  if(window.panelOffset[nombre]===undefined) window.panelOffset[nombre]=Math.max(0,sorted.length-PANEL_PAGE);
+  const pOffset=window.panelOffset[nombre];
+  const pSlice=sorted.slice(pOffset, pOffset+PANEL_PAGE);
+
   panelChartInst=new Chart(ctx,{type:'line',data:{
-    labels:sorted.map(r=>r.quincena),
+    labels:pSlice.map(r=>r.quincena),
     datasets:[{
       label:'% Desviación',
-      data:sorted.map(r=>parseFloat((r.pct*100).toFixed(2))),
+      data:pSlice.map(r=>parseFloat((r.pct*100).toFixed(2))),
       borderColor:'rgba(24,119,242,.4)',
       backgroundColor:'rgba(24,119,242,.05)',
       fill:true, tension:.4,
       pointRadius:sorted.map(r=>puntRadius(r)),
       pointHoverRadius:9,
       pointBackgroundColor:sorted.map(r=>puntColor(r)),
-      pointBorderColor:sorted.map(r=>r.concEstado==='CONCILIADA'?'#22c55e':'rgba(24,119,242,.4)'),
-      pointBorderWidth:sorted.map(r=>r.concEstado==='CONCILIADA'?2:1),
+      pointBorderColor:pSlice.map(r=>r.concEstado==='CONCILIADA'?'#22c55e':'rgba(24,119,242,.4)'),
+      pointBorderWidth:pSlice.map(r=>r.concEstado==='CONCILIADA'?2:1),
     }]},
     options:{responsive:true,maintainAspectRatio:false,
       plugins:{legend:{display:false},
@@ -1236,7 +1244,15 @@ function openPanel(nombre){
     }});
 
   // Leyenda del gráfico
-  const legendHtml=`
+  const totalEntries=sorted.length;
+  const showNav=totalEntries>PANEL_PAGE;
+  const navHtml=showNav?`
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
+      <button onclick="panelNav('${nombre.replace(/'/g,"\'")}',-1)" style="font-size:11px;padding:3px 8px;border-radius:4px;border:0.5px solid var(--border);background:var(--surface);cursor:pointer">←</button>
+      <span style="font-size:11px;color:var(--text3)">${pOffset+1}–${Math.min(pOffset+PANEL_PAGE,totalEntries)} de ${totalEntries}</span>
+      <button onclick="panelNav('${nombre.replace(/'/g,"\'") }',1)" style="font-size:11px;padding:3px 8px;border-radius:4px;border:0.5px solid var(--border);background:var(--surface);cursor:pointer">→</button>
+    </div>`:'';
+  const legendHtml=navHtml+`
     <div style="display:flex;gap:12px;font-size:10px;color:var(--text3);margin-top:4px;margin-bottom:12px;flex-wrap:wrap">
       <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#22c55e;margin-right:4px;vertical-align:middle"></span>Conciliado / Coincide</span>
       <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#f4a225;margin-right:4px;vertical-align:middle"></span>Parcial / Leve</span>
@@ -1278,6 +1294,15 @@ function openPanel(nombre){
   document.getElementById('panelOverlay').style.display='block';
   document.getElementById('panel').style.display='block';
   document.getElementById('panel').classList.add('panel-enter');
+}
+function panelNav(nombre, dir){
+  if(!window.panelOffset) window.panelOffset={};
+  const sorted=[...historico.productos.filter(p=>p.producto===nombre)].sort((a,b)=>new Date(a.fecha||0)-new Date(b.fecha||0));
+  const total=sorted.length;
+  const PANEL_PAGE=8;
+  const cur=window.panelOffset[nombre]||0;
+  window.panelOffset[nombre]=Math.max(0,Math.min(cur+dir*PANEL_PAGE, Math.max(0,total-PANEL_PAGE)));
+  openPanel(nombre);
 }
 function closePanel(){document.getElementById('panelOverlay').style.display='none';document.getElementById('panel').style.display='none';}
 
@@ -1415,7 +1440,7 @@ async function processFile(file){
   try{
     const data=await parseXLSX(file);
     if(!data.length){showNotice('No se encontraron productos.','err');return;}
-    currentData=data;activeFilter='all';sortCol='impacto';sortAsc=false;searchTerm='';
+    currentData=data;currentSemana=null;activeFilter='all';sortCol='impacto';sortAsc=false;searchTerm='';
     document.querySelectorAll('.fbtn').forEach(b=>b.className='fbtn');
     const allBtn=document.querySelector('.fbtn');if(allBtn) allBtn.classList.add('f-all');
     renderAll();
@@ -1442,6 +1467,7 @@ function actualizarSelectorSemana(){
 }
 
 function cambiarSemanaVista(semana){
+  currentSemana=semana;
   const prods=historico.productos.filter(p=>p.quincena===semana);
   if(!prods.length){showNotice('No hay datos para esta semana.','err');return;}
   currentData=prods.map(p=>({
