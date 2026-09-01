@@ -628,7 +628,7 @@ async function fetchHistorico(){
     const d=await jsonpCall(APPS_SCRIPT_URL+'?action=get');
     if(d.ok){
       historico=d;
-      // Sheets is ALWAYS the source of truth - overwrite localStorage completely
+      // Sheets is source of truth - always replace localStorage
       conciliaciones={};
       const sheetConc=d.conciliaciones||{};
       Object.entries(sheetConc).forEach(([key,conc])=>{
@@ -1161,8 +1161,8 @@ function openPanel(nombre){
     };
   })];
 
-  // Agregar semana actual si existe y no está en histórico
-  if(cur){
+  // Only add 'Actual' point if viewing an unsaved/new upload (currentSemana is null)
+  if(cur && !currentSemana){
     const keyActual=cur.producto+'||actual';
     const concActual=conciliaciones[keyActual]||{estado:'PENDIENTE',explicaciones:[]};
     if(!allRegs.find(r=>r.quincena==='Actual')){
@@ -1352,7 +1352,7 @@ function renderTop5(data){
         const veces=prodHist[d.producto]||0;
         const recur=veces>=2?`<span class="pill p-red">🔁 ${veces}x</span>`:veces===1?`<span class="pill p-amber">1x</span>`:'<span style="color:var(--text3);font-size:11px">Nuevo</span>';
         const pct=(d.pct>=0?'+':'')+(d.pct*100).toFixed(1)+'%';
-        const key=d.producto+'||actual';
+        const key=concKey(d.producto);
         const conc=conciliaciones[key]||{estado:'PENDIENTE',explicaciones:[]};
         const desvAbs=Math.abs(d.desv);
         const expCant=conc.explicaciones.reduce((s,e)=>s+e.cantidad,0);
@@ -1367,7 +1367,7 @@ function renderTop5(data){
           <td style="font-weight:700;color:${d.estado==='ELEVADA'?'var(--red)':'var(--amber)'}">${pct}</td>
           <td style="font-weight:700">€${d.impacto.toFixed(2)}</td>
           <td><span class="pill ${pill}">${lab}</span></td>
-          <td><span class="conc-badge ${concCls}" onclick="abrirConciliacion('${d.producto.replace(/'/g,"\'")}','actual')">${concIcon} ${concLbl}</span></td>
+          <td><span class="conc-badge ${concCls}" onclick="abrirConciliacion('${d.producto.replace(/'/g,"\'")}',currentSemana||'actual')">${concIcon} ${concLbl}</span></td>
           <td>${recur}</td>
         </tr>`;
       }).join('')}
@@ -1661,14 +1661,11 @@ function buildAllRows(){
     const prod=currentData.find(d=>d.producto===producto);
     const histProd=historico.productos.find(p=>p.producto===producto&&p.quincena===semana);
     (conc.explicaciones||[]).forEach(e=>{
-      rows.push({
-        semana, producto,
+      rows.push({semana, producto,
         familia: prod?prod.familia:(histProd?histProd.familia:''),
-        causa: e.causa||'',
-        cantidad: e.cantidad||0,
+        causa: e.causa||'', cantidad: e.cantidad||0,
         unidad: e.unidad||(prod?prod.unidad:(histProd?histProd.unidad:'')),
-        comentario: e.comentario||'',
-        fecha: e.fecha||''
+        comentario: e.comentario||'', fecha: e.fecha||''
       });
     });
   });
@@ -1677,24 +1674,18 @@ function buildAllRows(){
 
 function addExpToSheets(semana, producto, exp){
   if(!APPS_SCRIPT_URL) return;
-  const rows=buildAllRows();
-  const encoded=encodeURIComponent(JSON.stringify({rows}));
+  const encoded=encodeURIComponent(JSON.stringify({rows:buildAllRows()}));
   jsonpCall(APPS_SCRIPT_URL+'?action=saveConc&payload='+encoded)
-    .then(r=>{
-      if(r&&r.ok) showNotice('Guardado en Sheets: '+r.message,'ok');
-      else showNotice('Error guardando en Sheets.','err');
-    })
+    .then(r=>{ if(r&&r.ok) showNotice('Guardado en Sheets.','ok');
+               else showNotice('Error guardando en Sheets.','err'); })
     .catch(()=>showNotice('Sin conexión con Sheets.','err'));
 }
 
 function delExpFromSheets(semana, producto, exp){
   if(!APPS_SCRIPT_URL) return;
-  const rows=buildAllRows();
-  const encoded=encodeURIComponent(JSON.stringify({rows}));
+  const encoded=encodeURIComponent(JSON.stringify({rows:buildAllRows()}));
   jsonpCall(APPS_SCRIPT_URL+'?action=saveConc&payload='+encoded)
-    .then(r=>{
-      if(r&&r.ok) showNotice('Explicación borrada del Sheets.','ok');
-    })
+    .then(r=>{ if(r&&r.ok) showNotice('Explicación eliminada.','ok'); })
     .catch(()=>{});
 }
 
