@@ -1690,7 +1690,8 @@ function badgeConc(producto, semana){
 function abrirConciliacion(producto, semana){
   const prod=currentData.find(d=>d.producto===producto);
   if(!prod) return;
-  const key=getConcKey(producto,semana);
+  const realSemana=semana==='actual'?(currentSemana||'actual'):semana;
+  const key=getConcKey(producto,realSemana);
   if(!conciliaciones[key]) conciliaciones[key]={estado:'PENDIENTE',explicaciones:[]};
   const conc=conciliaciones[key];
   // Use cantTeo-cantReal for desvAbs since desv can be 0 due to parsing
@@ -1791,23 +1792,29 @@ function guardarExplicacion(producto, semana){
   if(!cant||cant<=0){if(errEl){errEl.textContent='Ingresá una cantidad válida.';errEl.style.display='block';}return;}
   const prod=currentData.find(d=>d.producto===producto);
   if(!prod) return;
-  const key=getConcKey(producto,semana);
+  // FIX 1: Use real semana name, not 'actual'
+  const realSemana=semana==='actual'?(currentSemana||'actual'):semana;
+  const key=getConcKey(producto,realSemana);
   if(!conciliaciones[key]) conciliaciones[key]={estado:'PENDIENTE',explicaciones:[]};
   const conc=conciliaciones[key];
-  const desvAbs=Math.abs(prod.desv);
+  // FIX 2: desvAbs with proper fallback
+  const desvAbs=Math.abs(prod.desv)||Math.abs(prod.cantTeo-prod.cantReal);
   const explicado=conc.explicaciones.reduce((s,e)=>s+e.cantidad,0);
-  const pendiente=desvAbs-explicado;
-  const cantR=Math.round(cant*100)/100, pendienteR=Math.round(pendiente*100)/100;
-  if(cantR>pendienteR){if(errEl){errEl.textContent=`No podés explicar más de ${pendienteR.toFixed(2)} ${prod.unidad||'u'}.`;errEl.style.display='block';}return;}
-  conc.explicaciones.push({causa,cantidad:cantR,comentario,fecha:new Date().toISOString()});
+  const pendiente=Math.max(0,desvAbs-explicado);
+  const cantR=Math.round(cant*100)/100;
+  const pendienteR=Math.round(pendiente*100)/100;
+  if(cantR>pendienteR+0.01){
+    if(errEl){errEl.textContent=`No podés explicar más de ${pendienteR.toFixed(2)} ${prod.unidad||'u'}.`;errEl.style.display='block';}
+    return;
+  }
+  const exp={causa,cantidad:cantR,comentario,fecha:new Date().toISOString()};
+  conc.explicaciones.push(exp);
   const nuevoExplicado=conc.explicaciones.reduce((s,e)=>s+e.cantidad,0);
   const nuevoPendiente=Math.max(0,desvAbs-nuevoExplicado);
   conc.estado=nuevoPendiente<=0.01?'CONCILIADA':nuevoExplicado>0?'PARCIAL':'PENDIENTE';
   saveConciliaciones();
-  // Send only this new explanation to Sheets (tiny payload)
-  const newExp=conc.explicaciones[conc.explicaciones.length-1];
-  addExpToSheets(effectiveSemana||semana, producto, newExp);
-  // Refresh all views that show conciliation impact
+  // FIX 3: use realSemana (not effectiveSemana which was undefined)
+  addExpToSheets(realSemana, producto, exp);
   if(currentData.length){
     renderGauge(calcHealth(currentData));
     renderKPIs(currentData);
@@ -1815,12 +1822,9 @@ function guardarExplicacion(producto, semana){
     renderAlertas(currentData);
     renderDetail(currentData);
   }
-  // Refresh panel chart if open for this product
   const panelNameEl=document.getElementById('panelName');
-  if(panelNameEl&&panelNameEl.textContent===producto){
-    openPanel(producto);
-  }
-  abrirConciliacion(producto,semana);
+  if(panelNameEl&&panelNameEl.textContent===producto) openPanel(producto);
+  abrirConciliacion(producto,realSemana);
 }
 
 
