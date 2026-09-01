@@ -570,7 +570,7 @@ input[type=file]{display:none}
 
 <script>
 // ── Estado global ────────────────────────────────────────────
-let APPS_SCRIPT_URL = localStorage.getItem('shoronpo_api_url')||'https://script.google.com/macros/s/AKfycbyecasXGaMuY_TZJkNdjvoTFp7ORd7ynfsJYUeGYpj-K_R2zatwYZRSJjDNnC_JX7In/exec';
+let APPS_SCRIPT_URL = localStorage.getItem('shoronpo_api_url')||'https://script.google.com/macros/s/AKfycbxZ0kruBQMLIJpRAukbVbXAfGgvpJWInHRB9DROnH68PKq5BamI8j4AHQqToICxF4k/exec';
 let currentData=[], historico={quincenas:[],productos:[]}, conciliaciones={}, currentSemana=null;
 let activeFilter='all', sortCol='impacto', sortAsc=false, searchTerm='';
 let gaugeInst=null, histInst=null, histOnlyInst=null, scatterInst=null, panelChartInst=null;
@@ -1671,49 +1671,22 @@ function addExpToSheets(semana, producto, explicacion){
     comentario: explicacion.comentario||'',
     fecha: explicacion.fecha||new Date().toISOString()
   };
-  // Send as single-row saveConc for compatibility
-  const payload={rows: buildAllRows()};
-  payload.rows.push(row);
-  const encoded=encodeURIComponent(JSON.stringify(payload));
-  jsonpCall(APPS_SCRIPT_URL+'?action=saveConc&payload='+encoded)
+  const encoded=encodeURIComponent(JSON.stringify(row));
+  jsonpCall(APPS_SCRIPT_URL+'?action=addExp&payload='+encoded)
     .then(r=>{
       if(r&&r.ok) showNotice('Guardado en Sheets.','ok');
-      else showNotice('Error: '+(r&&r.error||'desconocido'),'err');
+      else { showNotice('Error Sheets: '+(r&&r.error),'err'); console.warn(r); }
     })
-    .catch(()=>showNotice('Sin conexión con Sheets.','err'));
+    .catch(e=>{ showNotice('No se pudo conectar con Sheets.','err'); console.error(e); });
 }
 
 function delExpFromSheets(semana, producto, exp){
   if(!APPS_SCRIPT_URL) return;
-  // Rebuild all rows without this exp and save
-  const payload={rows: buildAllRows().filter(r=>
-    !(r.semana===semana && r.producto===producto && r.causa===exp.causa && r.fecha===exp.fecha)
-  )};
-  const encoded=encodeURIComponent(JSON.stringify(payload));
-  jsonpCall(APPS_SCRIPT_URL+'?action=saveConc&payload='+encoded)
-    .then(r=>{ if(r&&r.ok) console.log('Sheets actualizado.'); })
+  const row={semana:semana||currentSemana||'actual', producto, causa:exp.causa, fecha:exp.fecha||''};
+  const encoded=encodeURIComponent(JSON.stringify(row));
+  jsonpCall(APPS_SCRIPT_URL+'?action=delExp&payload='+encoded)
+    .then(r=>{ if(r&&r.ok) console.log('Borrado de Sheets.'); })
     .catch(()=>{});
-}
-
-function buildAllRows(){
-  const rows=[];
-  Object.entries(conciliaciones).forEach(([key,conc])=>{
-    const parts=key.split('||');
-    const producto=parts[0], semana=parts[1]||'';
-    const prod=currentData.find(d=>d.producto===producto);
-    (conc.explicaciones||[]).forEach(e=>{
-      rows.push({
-        semana, producto,
-        familia: prod?prod.familia:'',
-        causa: e.causa||'',
-        cantidad: e.cantidad||0,
-        unidad: e.unidad||(prod?prod.unidad:''),
-        comentario: e.comentario||'',
-        fecha: e.fecha||''
-      });
-    });
-  });
-  return rows;
 }
 function loadConciliaciones(){
   try{const s=localStorage.getItem('shoronpo_conc');if(s) conciliaciones=JSON.parse(s);}catch(e){}
