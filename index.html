@@ -629,6 +629,7 @@ async function fetchHistorico(){
     const d=await jsonpCall(APPS_SCRIPT_URL+'?action=get');
     if(d.ok){
       historico=d;
+      recalcularImpactosHistorico();
       // Sheets is source of truth - always replace localStorage
       conciliaciones={};
       const sheetConc=d.conciliaciones||{};
@@ -772,6 +773,35 @@ function resetDashboard(){
 // ── Estado ───────────────────────────────────────────────────
 function getEstado(pct){const a=Math.abs(pct);return a<=0.02?'COINCIDE':a<=0.15?'LEVE':'ELEVADA';}
 
+// El impacto económico representa exclusivamente el valor de la desviación física.
+// Prioridad: coste unitario teórico; si no existe, coste unitario real.
+function calcularImpactoDesviacion(cantTeo,cantReal,desv,costeTeo,costeReal){
+  const qt=parseFloat(cantTeo)||0, qr=parseFloat(cantReal)||0;
+  const ct=parseFloat(costeTeo)||0, cr=parseFloat(costeReal)||0;
+  const desvLeida=parseFloat(desv);
+  const diferencia=Number.isFinite(desvLeida)&&Math.abs(desvLeida)>0.000001
+    ? Math.abs(desvLeida)
+    : Math.abs(qr-qt);
+  let costeUnitario=0;
+  if(Math.abs(qt)>0.000001&&Math.abs(ct)>0.000001) costeUnitario=Math.abs(ct/qt);
+  else if(Math.abs(qr)>0.000001&&Math.abs(cr)>0.000001) costeUnitario=Math.abs(cr/qr);
+  return Math.round(diferencia*costeUnitario*100)/100;
+}
+
+function recalcularImpactosHistorico(){
+  const impactoPorSemana={};
+  (historico.productos||[]).forEach(p=>{
+    p.impacto=calcularImpactoDesviacion(p.cantTeo,p.cantReal,p.desv,p.costeTeo,p.costeReal);
+    if(p.estado!=='COINCIDE'){
+      const semana=String(p.quincena);
+      impactoPorSemana[semana]=(impactoPorSemana[semana]||0)+p.impacto;
+    }
+  });
+  (historico.quincenas||[]).forEach(q=>{
+    q.impacto=Math.round((impactoPorSemana[String(q.quincena)]||0)*100)/100;
+  });
+}
+
 // ── Parse Excel ──────────────────────────────────────────────
 function parseXLSX(file){
   return new Promise((res,rej)=>{
@@ -801,10 +831,14 @@ function parseXLSX(file){
           const pct=parseFloat(r[iPD])||0;
           const ct=parseFloat(r[iKT])||0;
           const cr=parseFloat(r[iKR])||0;
+          const cantTeo=parseFloat(r[iCT])||0;
+          const cantReal=parseFloat(r[iCR])||0;
+          const desv=parseFloat(r[iCD])||0;
           data.push({familia:String(r[iF]||'').trim()||'Sin categoría',producto:prod,
-            unidad:String(r[iU]||'').trim(),cantTeo:parseFloat(r[iCT])||0,
-            cantReal:parseFloat(r[iCR])||0,desv:parseFloat(r[iCD])||0,pct,
-            costeTeo:ct,costeReal:cr,impacto:Math.abs(cr-ct),estado:getEstado(pct)});
+            unidad:String(r[iU]||'').trim(),cantTeo,cantReal,desv,pct,
+            costeTeo:ct,costeReal:cr,
+            impacto:calcularImpactoDesviacion(cantTeo,cantReal,desv,ct,cr),
+            estado:getEstado(pct)});
         }
         res(data);
       }catch(err){rej('Error: '+err.message);}
