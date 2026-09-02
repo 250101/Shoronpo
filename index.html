@@ -1298,7 +1298,9 @@ function openPanel(nombre){
       const concCls=r.concEstado==='CONCILIADA'?'conc-conciliada':r.concEstado==='PARCIAL'?'conc-parcial':'conc-pendiente';
       const concIcon=r.concEstado==='CONCILIADA'?'🟢':r.concEstado==='PARCIAL'?'🟠':'🔴';
       const concLbl=r.concEstado==='CONCILIADA'?'Conciliada':r.concEstado==='PARCIAL'?'Parcial':'Pendiente';
-      concCell=`<span class="conc-badge ${concCls}">${concIcon} ${concLbl}</span>`;
+      const semanaEsc=String(r.quincena).replace(/'/g,"\\'");
+      const productoEsc=nombre.replace(/'/g,"\\'");
+      concCell=`<span class="conc-badge ${concCls}" onclick="abrirConciliacion('${productoEsc}','${semanaEsc}')">${concIcon} ${concLbl}</span>`;
     }
     return `<tr>
       <td>${r.quincena}</td>
@@ -1309,9 +1311,10 @@ function openPanel(nombre){
     </tr>`;
   }).join('');
 
-  // Rebuild panel body preserving concSection if open
+  // Solo conservar la investigación si pertenece al mismo producto.
   const panelBody=document.getElementById('panelBody');
   const oldConc=document.getElementById('concSection');
+  const preserveConc=oldConc&&oldConc.dataset.producto===nombre;
   panelBody.innerHTML=legendHtml+`
     <table class="panel-hist-table" style="width:100%">
       <thead><tr>
@@ -1319,7 +1322,7 @@ function openPanel(nombre){
       </tr></thead>
       <tbody>${tablaRows}</tbody>
     </table>`;
-  if(oldConc) panelBody.appendChild(oldConc);
+  if(preserveConc) panelBody.appendChild(oldConc);
 
   document.getElementById('panelOverlay').style.display='block';
   document.getElementById('panel').style.display='block';
@@ -1761,9 +1764,19 @@ function badgeConc(producto, semana){
 }
 
 function abrirConciliacion(producto, semana){
-  const prod=currentData.find(d=>d.producto===producto);
-  if(!prod) return;
   const realSemana=semana==='actual'?(currentSemana||'actual'):semana;
+  const histProd=historico.productos.find(p=>p.producto===producto&&String(p.quincena)===String(realSemana));
+  const currentProd=currentData.find(d=>d.producto===producto);
+  const source=histProd||currentProd;
+  if(!source) return;
+  const prod={
+    ...source,
+    cantTeo:parseFloat(source.cantTeo)||0,
+    cantReal:parseFloat(source.cantReal)||0,
+    desv:parseFloat(source.desv)||0,
+    pct:parseFloat(source.pct)||0,
+    impacto:parseFloat(source.impacto)||0
+  };
   const key=getConcKey(producto,realSemana);
   if(!conciliaciones[key]) conciliaciones[key]={estado:'PENDIENTE',explicaciones:[]};
   const conc=conciliaciones[key];
@@ -1798,6 +1811,8 @@ function abrirConciliacion(producto, semana){
 
   const concSection=document.createElement('div');
   concSection.id='concSection';
+  concSection.dataset.producto=producto;
+  concSection.dataset.semana=realSemana;
   concSection.innerHTML=`
     <div style="margin:16px 0 10px;padding-top:12px;border-top:0.5px solid var(--border)">
       <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">Investigación y conciliación</div>
