@@ -291,7 +291,7 @@ input[type=file]{display:none}
 <!-- Loading overlay -->
 <div class="loading-overlay" id="loadingOverlay">
   <div class="loading-spinner"></div>
-  <div class="loading-text" id="loadingText">Conectando con Google Sheets...</div>
+  <div class="loading-text" id="loadingText">Conectando con la base de datos...</div>
 </div>
 
 <!-- Topbar -->
@@ -308,7 +308,7 @@ input[type=file]{display:none}
         style="font-size:12px;font-weight:600;padding:4px 10px;border-radius:6px;border:1px solid rgba(255,255,255,.3);background:#1259c3;color:#fff;cursor:pointer;max-width:180px">
       </select>
     </div>
-    <div class="conn-dot" id="connDot" title="Estado de conexión con Google Sheets"></div>
+    <div class="conn-dot" id="connDot" title="Estado de conexión con la base de datos"></div>
     <span id="connLabel" style="font-size:11px;color:rgba(255,255,255,.7)">Conectando...</span>
     <input type="hidden" id="apiUrl">
     <button class="conn-btn" onclick="retryConnection()" id="btnReconectar" style="display:none">↺ Reconectar</button>
@@ -404,7 +404,7 @@ input[type=file]{display:none}
         </div>
         <div>
           <div class="progress-bar" id="progressBar"><div class="progress-fill" id="progressFill"></div></div>
-          <button class="btn btn-primary" id="btnCerrar" onclick="cerrarQuincena()">✓ Cerrar semana → Sheets</button>
+          <button class="btn btn-primary" id="btnCerrar" onclick="cerrarQuincena()">✓ Cerrar semana</button>
         </div>
       </div>
     </div>
@@ -517,7 +517,7 @@ input[type=file]{display:none}
   <!-- ── VISTA GESTIÓN ── -->
   <div class="view" id="view-gestion">
     <div class="card card-full">
-      <div class="card-title">Semanas guardadas en Google Sheets
+      <div class="card-title">Semanas guardadas en la base de datos
         <button class="conn-btn" style="background:var(--blue);border-color:var(--blue);color:#fff;font-size:11px;padding:5px 12px;border-radius:6px;cursor:pointer;border:none" onclick="fetchHistorico().then(()=>{renderGestion();showNotice('Histórico actualizado.','ok')})">↺ Actualizar</button>
       </div>
       <div id="gestionContent">
@@ -595,28 +595,11 @@ input[type=file]{display:none}
 
 <script>
 // ── Estado global ────────────────────────────────────────────
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwG2DVgSsp8_AXufgi0LB1-fNJQ7P53ItjJWA0xhZBYImC7KYioocX-ibcZO5DWngFB/exec';
 let currentData=[], historico={quincenas:[],productos:[]}, conciliaciones={}, currentSemana=null;
 let activeFilter='all', sortCol='impacto', sortAsc=false, searchTerm='';
 let gaugeInst=null, histInst=null, histOnlyInst=null, scatterInst=null, panelChartInst=null;
 
-document.getElementById('apiUrl').value = APPS_SCRIPT_URL;
-// Evita que una URL antigua guardada por una versión previa vuelva a imponerse.
 localStorage.removeItem('shoronpo_api_url');
-console.log('[Shoronpo] APPS_SCRIPT_URL:', APPS_SCRIPT_URL);
-
-// ── JSONP ────────────────────────────────────────────────────
-function jsonpCall(url){
-  return new Promise((res,rej)=>{
-    const cb='sh_'+Date.now()+'_'+Math.floor(Math.random()*99999);
-    const s=document.createElement('script');
-    const cleanup=()=>{try{delete window[cb];s.remove();}catch(e){}};
-    const t=setTimeout(()=>{cleanup();rej(new Error('Tiempo de espera agotado.'));},20000);
-    window[cb]=(d)=>{clearTimeout(t);cleanup();res(d);};
-    s.src=url+(url.includes('?')?'&':'?')+'callback='+cb+'&_ts='+Date.now();
-    document.body.appendChild(s);
-  });
-}
 
 // ── Conexión ─────────────────────────────────────────────────
 function saveApiUrl(){ /* URL hardcodeada */ }
@@ -628,20 +611,20 @@ async function retryConnection(){
 }
 
 async function testConnection(){
-  if(!APPS_SCRIPT_URL){showNotice('Pegá la URL del Apps Script primero.','err');return;}
-  document.getElementById('apiUrl').value=APPS_SCRIPT_URL;
   const dot=document.getElementById('connDot');
   dot.className='conn-dot loading';
-  showLoading('Conectando con Google Sheets...');
+  document.getElementById('connLabel').textContent='Conectando...';
+  showLoading('Conectando con la base de datos...');
   try{
-    const d=await jsonpCall(APPS_SCRIPT_URL+'?action=ping');
-    if(d.ok){
-      dot.className='conn-dot ok';
-      await fetchHistorico();
-      showNotice('Conexión OK. Histórico cargado.','ok');
-    } else throw new Error(d.error);
+    const {error}=await supabaseClient.from('inventory_periods').select('id',{head:true,count:'exact'});
+    if(error) throw error;
+    dot.className='conn-dot ok';
+    document.getElementById('connLabel').textContent='Base de datos conectada';
+    await fetchHistorico();
+    showNotice('Base de datos conectada. Histórico cargado.','ok');
   }catch(e){
     dot.className='conn-dot err';
+    document.getElementById('connLabel').textContent='Sin conexión';
     showNotice('No se pudo conectar: '+e.message,'err');
   }finally{
     hideLoading();
@@ -649,38 +632,45 @@ async function testConnection(){
 }
 
 async function fetchHistorico(){
-  if(!APPS_SCRIPT_URL) return;
   try{
-    const d=await jsonpCall(APPS_SCRIPT_URL+'?action=get');
-    if(d.ok){
-      historico=d;
-      recalcularImpactosHistorico();
-      // Sheets is source of truth - always replace localStorage
-      conciliaciones={};
-      const sheetConc=d.conciliaciones||{};
-      Object.entries(sheetConc).forEach(([key,conc])=>{
-        const parts=key.split('||');
-        const producto=parts[0], semana=parts[1];
-        const histProd=historico.productos.find(p=>p.producto===producto&&p.quincena===semana);
-        if(histProd){
-          const desvAbs=Math.abs(parseFloat(histProd.desv)||0)||Math.abs(parseFloat(histProd.cantTeo)-parseFloat(histProd.cantReal));
-          const expCant=(conc.explicaciones||[]).reduce((s,e)=>s+(e.cantidad||0),0);
-          const pendiente=Math.max(0,desvAbs-expCant);
-          conc.estado=pendiente<=0.01?'CONCILIADA':expCant>0?'PARCIAL':'PENDIENTE';
-        }
+    const {data:periods,error}=await supabaseClient.from('inventory_periods').select(`
+      id,label,recorded_at,
+      inventory_lines(id,theoretical_quantity,actual_quantity,deviation_quantity,deviation_pct,theoretical_cost,actual_cost,impact,deviation_status,
+        products(name,family,unit),
+        inventory_reconciliations(id,cause,quantity,comment,occurred_at)
+      )
+    `).eq('status','CLOSED').order('recorded_at');
+    if(error) throw error;
+    historico={quincenas:[],productos:[]};conciliaciones={};
+    (periods||[]).forEach(period=>{
+      const lines=period.inventory_lines||[];
+      const counts={COINCIDE:0,LEVE:0,ELEVADA:0};let totalImpact=0;
+      lines.forEach(line=>{
+        counts[line.deviation_status]=(counts[line.deviation_status]||0)+1;
+        if(line.deviation_status!=='COINCIDE') totalImpact+=Number(line.impact)||0;
+        const product={id:line.id,lineId:line.id,quincena:period.label,fecha:period.recorded_at,
+          familia:line.products?.family||'',producto:line.products?.name||'',unidad:line.products?.unit||'',
+          cantTeo:Number(line.theoretical_quantity),cantReal:Number(line.actual_quantity),desv:Number(line.deviation_quantity),
+          pct:Number(line.deviation_pct),costeTeo:Number(line.theoretical_cost),costeReal:Number(line.actual_cost),
+          impacto:Number(line.impact),estado:line.deviation_status};
+        historico.productos.push(product);
+        const explicaciones=(line.inventory_reconciliations||[]).map(row=>({
+          id:row.id,causa:row.cause,cantidad:Number(row.quantity),unidad:product.unidad,
+          comentario:row.comment||'',fecha:row.occurred_at
+        }));
+        const explicado=explicaciones.reduce((sum,row)=>sum+row.cantidad,0);
+        const pendiente=Math.max(0,Math.abs(product.desv)-explicado);
+        conciliaciones[product.producto+'||'+period.label]={
+          estado:pendiente<=0.01?'CONCILIADA':explicado>0?'PARCIAL':'PENDIENTE',explicaciones
+        };
       });
-      conciliaciones=sheetConc;
-      saveConciliaciones(); // caché local; Sheets sigue siendo la fuente de verdad
-      renderHistPreview();
-      renderNavVisibility();
-      renderCompararSelector();
-      actualizarSelectorSemana();
-      if(currentData.length){
-        renderAll();
-      } else {
-        cargarUltimaSemana();
-      }
-    }
+      historico.quincenas.push({quincena:period.label,fecha:period.recorded_at,total:lines.length,
+        coincide:counts.COINCIDE||0,leve:counts.LEVE||0,elevada:counts.ELEVADA||0,impacto:totalImpact});
+    });
+    recalcularImpactosHistorico();saveConciliaciones();renderHistPreview();renderNavVisibility();
+    renderCompararSelector();actualizarSelectorSemana();
+    if(currentSemana&&historico.quincenas.some(item=>item.quincena===currentSemana)) cambiarSemanaVista(currentSemana);
+    else if(currentData.length) renderAll(); else cargarUltimaSemana();
   }catch(e){console.warn('fetchHistorico:',e);}
 }
 
@@ -768,13 +758,13 @@ function renderGestion(){
       </tbody>
     </table>
     <div class="gestion-info">
-      <strong>Para eliminar una semana:</strong> abrí Google Sheets → pestaña <em>Semanas</em> y borrá la fila correspondiente. También borrá los productos en la pestaña <em>Historico</em>. Luego hacé clic en ↺ Actualizar.
+      <strong>Para eliminar una semana:</strong> solicitá la operación a un administrador. Los períodos cerrados no se eliminan desde esta pantalla para preservar la auditoría.
     </div>`;
 }
 
 // ── Reset dashboard ───────────────────────────────────────────
 function resetDashboard(){
-  if(!confirm('¿Seguro que querés limpiar el inventario actual?\nEl histórico en Sheets no se borra.')) return;
+  if(!confirm('¿Seguro que querés limpiar el inventario actual?\nEl histórico de la base de datos no se borra.')) return;
   currentData=[];
   activeFilter='all'; sortCol='impacto'; sortAsc=false; searchTerm='';
   document.getElementById('landingSection').style.display='block';
@@ -1465,31 +1455,32 @@ function renderAll(){
 // ── Cerrar semana ───────────────────────────────────────────
 async function cerrarQuincena(){
   if(!currentData.length){showNotice('Primero cargá un export.','err');return;}
-  if(!APPS_SCRIPT_URL){showNotice('Configurá la URL del Apps Script.','err');return;}
   const q=prompt('Nombre de la semana (ej: Q1 Jul 2026):');
   if(!q) return;
-  if(!confirm(`¿Guardás la semana "${q}" en Google Sheets?`)) return;
+  if(!confirm(`¿Guardás la semana "${q}" en la base de datos?`)) return;
   const btn=document.getElementById('btnCerrar');
   const bar=document.getElementById('progressBar'),fill=document.getElementById('progressFill');
   btn.innerHTML='<span class="spinner"></span> Guardando...';btn.disabled=true;bar.style.display='block';
   try{
-    const fecha=new Date().toISOString(),loteSize=10;
-    for(let i=0;i<currentData.length;i+=loteSize){
-      const lote=currentData.slice(i,i+loteSize);
-      const payload={action:'save',quincena:q,fecha,productos:lote,primerLote:i===0};
-      const encoded=encodeURIComponent(JSON.stringify(payload));
-      const d=await jsonpCall(APPS_SCRIPT_URL+'?action=save&payload='+encoded);
-      if(!d.ok) throw new Error(d.error||'Error al guardar');
-      fill.style.width=Math.round(((i+loteSize)/currentData.length)*100)+'%';
-    }
+    const location=authenticatedUser?.locations?.find(item=>item.type==='OBRADOR'&&item.is_active);
+    if(!location) throw new Error('Tu usuario no tiene un obrador activo asignado.');
+    fill.style.width='35%';
+    const lines=currentData.map(item=>({product_name:item.producto,theoretical_quantity:item.cantTeo,
+      actual_quantity:item.cantReal,theoretical_cost:item.costeTeo,actual_cost:item.costeReal}));
+    const {error}=await supabaseClient.rpc('close_inventory_period',{
+      p_location_id:location.id,p_label:q,p_recorded_at:new Date().toISOString(),p_lines:lines
+    });
+    if(error) throw error;
+    fill.style.width='100%';
     showNotice(`Semana "${q}" guardada correctamente.`,'ok');
     document.getElementById('qbadge').textContent=q;document.getElementById('qbadge').style.display='block';
+    currentSemana=q;
     await fetchHistorico();
     actualizarSelectorSemana();
     const sel=document.getElementById('semanaSelector');
     if(sel) sel.value=q;
   }catch(e){showNotice('Error: '+e.message,'err');}
-  finally{btn.innerHTML='✓ Cerrar semana → Sheets';btn.disabled=false;setTimeout(()=>{bar.style.display='none';fill.style.width='0%';},2000);}
+  finally{btn.innerHTML='✓ Cerrar semana';btn.disabled=false;setTimeout(()=>{bar.style.display='none';fill.style.width='0%';},2000);}
 }
 
 // ── Procesar archivo ──────────────────────────────────────────
@@ -1529,7 +1520,7 @@ function cambiarSemanaVista(semana){
   const prods=historico.productos.filter(p=>p.quincena===semana);
   if(!prods.length){showNotice('No hay datos para esta semana.','err');return;}
   currentData=prods.map(p=>({
-    familia:p.familia, producto:p.producto, unidad:p.unidad||'',
+    id:p.id,lineId:p.lineId,familia:p.familia, producto:p.producto, unidad:p.unidad||'',
     cantTeo:parseFloat(p.cantTeo)||0, cantReal:parseFloat(p.cantReal)||0,
     desv:parseFloat(p.desv)||0, pct:parseFloat(p.pct)||0,
     costeTeo:parseFloat(p.costeTeo)||0, costeReal:parseFloat(p.costeReal)||0,
@@ -1695,26 +1686,7 @@ function hideLoading(){document.getElementById('loadingOverlay').classList.remov
 
 // ── Auto-conectar al iniciar ──────────────────────────────────
 // ── Conciliación ──────────────────────────────────────────────
-function syncConcToSheets(){
-  // Legacy: sync all rows at once (fallback only)
-  if(!APPS_SCRIPT_URL) return;
-  const rows=[];
-  Object.entries(conciliaciones).forEach(([key,conc])=>{
-    const parts=key.split('||');
-    const producto=parts[0], semana=parts[1]||'';
-    const prod=currentData.find(d=>d.producto===producto);
-    (conc.explicaciones||[]).forEach(e=>{
-      rows.push({semana,producto,familia:prod?prod.familia:'',
-        causa:e.causa||'',cantidad:e.cantidad||0,
-        unidad:e.unidad||(prod?prod.unidad:''),
-        comentario:e.comentario||'',fecha:e.fecha||''});
-    });
-  });
-  const encoded=encodeURIComponent(JSON.stringify({rows}));
-  jsonpCall(APPS_SCRIPT_URL+'?action=saveConc&payload='+encoded)
-    .then(r=>{ if(r&&r.ok) console.log('Sync OK:',r.message); })
-    .catch(()=>{});
-}
+function syncConcToSheets(){ /* retirado: Supabase es la fuente de verdad */ }
 
 function buildAllRows(){
   const rows=[];
@@ -1736,31 +1708,19 @@ function buildAllRows(){
 }
 
 async function addExpToSheets(semana, producto, exp){
-  if(!APPS_SCRIPT_URL) throw new Error('API no configurada');
-  const prod=currentData.find(d=>d.producto===producto);
   const histProd=historico.productos.find(p=>p.producto===producto&&p.quincena===semana);
-  const row={
-    id:exp.id, semana, producto,
-    familia:prod?.familia||histProd?.familia||'',
-    causa:exp.causa||'', cantidad:exp.cantidad||0,
-    unidad:exp.unidad||prod?.unidad||histProd?.unidad||'',
-    comentario:exp.comentario||'', fecha:exp.fecha||''
-  };
-  const encoded=encodeURIComponent(JSON.stringify(row));
-  const r=await jsonpCall(APPS_SCRIPT_URL+'?action=addConc&payload='+encoded);
-  if(!r||!r.ok) throw new Error(r?.error||'No se pudo guardar en Sheets');
-  return r;
+  if(!histProd?.lineId) throw new Error('No se encontró la línea de inventario en la base de datos.');
+  const {error}=await supabaseClient.from('inventory_reconciliations').insert({
+    id:exp.id,inventory_line_id:histProd.lineId,cause:exp.causa,quantity:exp.cantidad,
+    comment:exp.comentario||null,occurred_at:exp.fecha
+  });
+  if(error) throw error;
 }
 
 async function delExpFromSheets(semana, producto, exp){
-  if(!APPS_SCRIPT_URL) throw new Error('API no configurada');
-  const encoded=encodeURIComponent(JSON.stringify({
-    id:exp.id||'', semana, producto, causa:exp.causa||'',
-    cantidad:exp.cantidad||0, fecha:exp.fecha||''
-  }));
-  const r=await jsonpCall(APPS_SCRIPT_URL+'?action=deleteConc&payload='+encoded);
-  if(!r||!r.ok) throw new Error(r?.error||'No se pudo eliminar de Sheets');
-  return r;
+  if(!exp.id) throw new Error('La conciliación no tiene ID.');
+  const {error}=await supabaseClient.from('inventory_reconciliations').delete().eq('id',exp.id);
+  if(error) throw error;
 }
 
 function loadConciliaciones(){
@@ -1931,9 +1891,9 @@ async function guardarExplicacion(producto, semana){
   saveConciliaciones();
   try{
     await addExpToSheets(realSemana, producto, exp);
-    showNotice('Explicación guardada en Sheets.','ok');
+    showNotice('Explicación guardada en la base de datos.','ok');
   }catch(e){
-    // Revertir la interfaz si Sheets no confirmó el guardado.
+    // Revertir la interfaz si la base de datos no confirmó el guardado.
     conc.explicaciones=conc.explicaciones.filter(item=>item.id!==exp.id);
     const rollbackTotal=conc.explicaciones.reduce((s,e)=>s+e.cantidad,0);
     conc.estado=rollbackTotal>0?'PARCIAL':'PENDIENTE';
@@ -1968,9 +1928,9 @@ async function borrarExplicacion(producto, semana, idx){
   saveConciliaciones();
   try{
     await delExpFromSheets(semana, producto, removedExp);
-    showNotice('Explicación eliminada de Sheets.','ok');
+    showNotice('Explicación eliminada de la base de datos.','ok');
   }catch(e){
-    // Restaurar en su posición si Sheets no confirmó la eliminación.
+    // Restaurar en su posición si la base de datos no confirmó la eliminación.
     conciliaciones[key].explicaciones.splice(idx,0,removedExp);
     if(prod){
       const desvAbs=Math.abs(prod.desv)||Math.abs(prod.cantTeo-prod.cantReal);
