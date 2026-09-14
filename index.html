@@ -7,6 +7,7 @@
 <title>Shoronpo · Inventario</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.57.4/dist/umd/supabase.min.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -40,6 +41,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .conn-input::placeholder{color:rgba(255,255,255,.5)}
 .conn-btn{font-size:11px;font-weight:600;padding:6px 14px;border-radius:var(--r-xs);border:1px solid rgba(255,255,255,.4);background:rgba(255,255,255,.15);color:#fff;cursor:pointer;transition:all .2s}
 .conn-btn:hover{background:rgba(255,255,255,.28)}
+.auth-user{display:none;align-items:center;gap:8px;color:#fff;font-size:11px;border-left:1px solid rgba(255,255,255,.25);padding-left:10px}
+.auth-user.show{display:flex}.auth-role{font-weight:700;background:rgba(255,255,255,.2);padding:3px 8px;border-radius:20px}
+.auth-gate{position:fixed;inset:0;z-index:1000;background:linear-gradient(135deg,#0d3f8f,#1877F2);display:flex;align-items:center;justify-content:center;padding:20px}
+.auth-gate.hidden{display:none}.auth-card{width:min(420px,100%);background:#fff;border-radius:16px;padding:32px;box-shadow:0 20px 60px rgba(0,0,0,.25)}
+.auth-card h1{font-size:25px;margin-bottom:6px}.auth-card>p{color:var(--text3);font-size:13px;margin-bottom:24px}
+.auth-field{display:block;margin-bottom:14px}.auth-field span{display:block;font-size:12px;font-weight:700;color:var(--text2);margin-bottom:5px}
+.auth-field input{width:100%;padding:11px 12px;border:1px solid var(--border2);border-radius:8px;font:inherit}.auth-field input:focus{outline:2px solid var(--blue-l);border-color:var(--blue)}
+.auth-submit{width:100%;border:0;border-radius:8px;padding:11px;background:var(--blue);color:#fff;font-weight:700;cursor:pointer}.auth-submit:disabled{opacity:.55;cursor:wait}
+.auth-error{display:none;margin-top:12px;padding:9px 11px;border-radius:7px;background:var(--red-bg);color:var(--red-text);font-size:12px}
 
 /* Nav */
 .nav{background:var(--surface);border-bottom:1px solid var(--border);padding:0 24px;display:flex;gap:4px;position:sticky;top:60px;z-index:100;display:none}
@@ -267,6 +277,17 @@ input[type=file]{display:none}
 </head>
 <body>
 
+<div class="auth-gate" id="authGate">
+  <form class="auth-card" id="authForm">
+    <h1>Ingresar a Shoronpo</h1>
+    <p>Acceso restringido al equipo autorizado.</p>
+    <label class="auth-field"><span>Email</span><input id="authEmail" type="email" autocomplete="username" required></label>
+    <label class="auth-field"><span>Contraseña</span><input id="authPassword" type="password" autocomplete="current-password" required></label>
+    <button class="auth-submit" id="authSubmit" type="submit">Ingresar</button>
+    <div class="auth-error" id="authError" role="alert"></div>
+  </form>
+</div>
+
 <!-- Loading overlay -->
 <div class="loading-overlay" id="loadingOverlay">
   <div class="loading-spinner"></div>
@@ -291,6 +312,10 @@ input[type=file]{display:none}
     <span id="connLabel" style="font-size:11px;color:rgba(255,255,255,.7)">Conectando...</span>
     <input type="hidden" id="apiUrl">
     <button class="conn-btn" onclick="retryConnection()" id="btnReconectar" style="display:none">↺ Reconectar</button>
+    <div class="auth-user" id="authUser">
+      <span id="authIdentity"></span><span class="auth-role" id="authRole"></span>
+      <button class="conn-btn" onclick="logout()">Salir</button>
+    </div>
   </div>
 </div>
 
@@ -1998,8 +2023,78 @@ function getImpactoConc(data){
   return {sinExplicar, explicado};
 }
 
-// Auto-conectar al iniciar
-testConnection();
+// ── Autenticación Supabase (Fase 2) ───────────────────────────
+const SUPABASE_URL='https://htuearldqvzqohoxwmdp.supabase.co';
+const SUPABASE_PUBLISHABLE_KEY='sb_publishable_KZKbJob8_QwdWs3VUPVKgw_6IVK0LQV';
+const supabaseClient=window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY,{
+  auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:false}
+});
+let authenticatedUser=null;
+
+function authMessage(message){
+  const el=document.getElementById('authError');
+  el.textContent=message||'';el.style.display=message?'block':'none';
+}
+
+async function loadAuthorization(user){
+  const [{data:profile,error:profileError},{data:roleRows,error:roleError},{data:locationRows,error:locationError}]=await Promise.all([
+    supabaseClient.from('profiles').select('display_name,is_active').eq('user_id',user.id).single(),
+    supabaseClient.from('user_roles').select('roles(code)').eq('user_id',user.id),
+    supabaseClient.from('locations').select('id,code,name,type,is_active').order('code')
+  ]);
+  if(profileError||roleError||locationError) throw new Error('No se pudieron validar tus permisos.');
+  if(!profile?.is_active) throw new Error('Tu usuario está desactivado.');
+  const roles=(roleRows||[]).map(row=>row.roles?.code).filter(Boolean);
+  if(!roles.length) throw new Error('Tu usuario no tiene un rol asignado.');
+  return {profile,roles,locations:locationRows||[]};
+}
+
+async function activateSession(session){
+  if(!session?.user){document.getElementById('authGate').classList.remove('hidden');return false;}
+  const access=await loadAuthorization(session.user);
+  authenticatedUser={...session.user,...access};
+  document.getElementById('authIdentity').textContent=access.profile.display_name||session.user.email;
+  document.getElementById('authRole').textContent=access.roles.join(' · ');
+  document.getElementById('authUser').classList.add('show');
+  document.getElementById('authGate').classList.add('hidden');
+  await testConnection();
+  return true;
+}
+
+document.getElementById('authForm').addEventListener('submit',async event=>{
+  event.preventDefault();authMessage('');
+  const button=document.getElementById('authSubmit');button.disabled=true;button.textContent='Validando…';
+  try{
+    const {data,error}=await supabaseClient.auth.signInWithPassword({
+      email:document.getElementById('authEmail').value.trim(),
+      password:document.getElementById('authPassword').value
+    });
+    if(error) throw error;
+    await activateSession(data.session);
+    document.getElementById('authPassword').value='';
+  }catch(error){
+    await supabaseClient.auth.signOut().catch(()=>{});
+    authMessage(error?.message==='Invalid login credentials'?'Email o contraseña incorrectos.':(error?.message||'No se pudo iniciar sesión.'));
+  }finally{button.disabled=false;button.textContent='Ingresar';}
+});
+
+async function logout(){
+  await supabaseClient.auth.signOut();authenticatedUser=null;
+  document.getElementById('authUser').classList.remove('show');
+  document.getElementById('authGate').classList.remove('hidden');
+}
+
+async function initializeApp(){
+  try{
+    const {data:{session}}=await supabaseClient.auth.getSession();
+    if(session) await activateSession(session);
+  }catch(error){
+    await supabaseClient.auth.signOut().catch(()=>{});
+    authMessage(error?.message||'No se pudo validar la sesión.');
+  }
+}
+
+initializeApp();
 </script>
 </body>
 </html>
