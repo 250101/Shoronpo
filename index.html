@@ -1583,25 +1583,27 @@ function ejecutarComparacion(){
 
   function kpiCard(label,valA,valB,unit,higherIsBad){
     const diff=valB-valA;
-    const diffStr=diff===0?'Sin cambio':(diff>0?'+':'')+diff+(unit||'');
+    const formatValue=value=>unit==='€'?'€'+value:value+(unit||'');
+    const diffUnit=unit==='€'?' €':(unit||'');
+    const diffStr=diff===0?'Sin cambio':(diff>0?'+':'')+diff+diffUnit;
     const cls=diff===0?'comp-change-neu':(higherIsBad?diff>0:diff<0)?'comp-change-bad':'comp-change-good';
     return `<div class="kpi-card" style="border-top:none;border-left:4px solid var(--blue)">
       <div class="comp-kpi-label">${label}</div>
       <div class="comp-kpi-vals">
-        <div><div style="font-size:11px;color:var(--text3);margin-bottom:2px">${qA}</div><div class="comp-kpi-val-a">${valA}${unit||''}</div></div>
+        <div><div style="font-size:11px;color:var(--text3);margin-bottom:2px">${qA}</div><div class="comp-kpi-val-a">${formatValue(valA)}</div></div>
         <div class="comp-kpi-arrow">→</div>
-        <div><div style="font-size:11px;color:var(--text3);margin-bottom:2px">${qB}</div><div class="comp-kpi-val-b">${valB}${unit||''}</div></div>
+        <div><div style="font-size:11px;color:var(--text3);margin-bottom:2px">${qB}</div><div class="comp-kpi-val-b">${formatValue(valB)}</div></div>
       </div>
       <div class="${cls}" style="font-size:12px;margin-top:8px">${diffStr}</div>
     </div>`;
   }
 
   document.getElementById('compararKpis').innerHTML=
-    kpiCard('Precisión',accA+'%',accB+'%','',false)+
+    kpiCard('Precisión',accA,accB,'%',false)+
     kpiCard('Desvíos elevados',elevA,elevB,'',true)+
     kpiCard('Desvíos leves',leveA,leveB,'',true)+
     kpiCard('Coinciden',coinA,coinB,'',false)+
-    kpiCard('Impacto €','€'+impA.toFixed(0),'€'+impB.toFixed(0),'',true);
+    kpiCard('Impacto €',Math.round(impA),Math.round(impB),'€',true);
 
   // Gráfico barras lado a lado
   const ctxBar=document.getElementById('compBarChart').getContext('2d');
