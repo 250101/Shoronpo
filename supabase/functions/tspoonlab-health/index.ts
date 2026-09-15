@@ -35,35 +35,41 @@ Deno.serve(async request => {
   })
   const checkedAt = new Date().toISOString()
 
+  const persistStatus = async (values: Record<string, unknown>) => {
+    const { error } = await supabase.from('tspoonlab_connector_status').upsert({
+      singleton: true,
+      ...values,
+      updated_at: checkedAt,
+    })
+    return error === null
+  }
+
   try {
     const token = Deno.env.get('TSPOONLAB_REMEMBERME') ?? ''
     const client = new TspoonlabClient(token, { timezone: 'Europe/Madrid' })
     await client.healthCheck()
 
-    await supabase.from('tspoonlab_connector_status').upsert({
-      singleton: true,
+    const persisted = await persistStatus({
       status: 'HEALTHY',
       last_checked_at: checkedAt,
       last_success_at: checkedAt,
       last_error_code: null,
-      updated_at: checkedAt,
     })
+    if (!persisted) return json({ ok: false, status: 'STATUS_WRITE_FAILED', checkedAt }, 500)
     return json({ ok: true, status: 'HEALTHY', checkedAt })
   } catch (error) {
     const code = error instanceof TspoonlabError ? error.code : 'INVALID_RESPONSE'
     const allowed = new Set(['AUTH_EXPIRED', 'FORBIDDEN', 'RATE_LIMITED', 'UPSTREAM_ERROR', 'NETWORK_ERROR', 'INVALID_RESPONSE'])
     const status = allowed.has(code) ? code : 'INVALID_RESPONSE'
 
-    await supabase.from('tspoonlab_connector_status').upsert({
-      singleton: true,
+    const persisted = await persistStatus({
       status,
       last_checked_at: checkedAt,
       last_error_code: status,
-      updated_at: checkedAt,
     })
+    if (!persisted) return json({ ok: false, status: 'STATUS_WRITE_FAILED', checkedAt }, 500)
 
     // No registrar el error original: podria contener detalles de red o del proveedor.
     return json({ ok: false, status, checkedAt }, status === 'AUTH_EXPIRED' ? 401 : 503)
   }
 })
-
