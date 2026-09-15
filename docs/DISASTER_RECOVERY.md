@@ -14,7 +14,7 @@ Conservar ocho copias semanales y doce mensuales. Mantener al menos dos copias e
 
 ## Preparación única del equipo de respaldo
 
-1. Instalar Docker Desktop y la CLI oficial de Supabase.
+1. Instalar las herramientas de línea de comandos de PostgreSQL 17 (`pg_dump` y `pg_dumpall`). Docker no es necesario.
 2. Ejecutar `powershell -ExecutionPolicy Bypass -File scripts/backup_supabase.ps1 -PreflightOnly`.
 3. Preparar un segundo destino cifrado para la copia externa.
 
@@ -98,4 +98,3 @@ Conservar ocho copias semanales y doce mensuales. Mantener al menos dos copias e
 - No guardar contraseñas, cadenas de conexión, tokens o claves `service_role` en archivos del proyecto.
 - No considerar válido un backup sin `manifest.json` o con archivos vacíos.
 - No borrar el proyecto afectado hasta validar el reemplazo y cerrar formalmente el incidente.
-

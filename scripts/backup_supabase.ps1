@@ -7,45 +7,44 @@ param(
 $ErrorActionPreference = 'Stop'
 $projectRef = 'htuearldqvzqohoxwmdp'
 
-function Require-Command([string]$Name, [string]$InstallHint) {
-  if (-not (Get-Command $Name -ErrorAction SilentlyContinue)) {
-    throw "Falta '$Name'. $InstallHint"
-  }
+function Resolve-PostgresTool([string]$Name) {
+  $command = Get-Command $Name -ErrorAction SilentlyContinue
+  if ($command) { return $command.Source }
+
+  $portable = Join-Path $env:LOCALAPPDATA "Programs\PostgreSQL-17-binaries\pgsql\bin\$Name.exe"
+  if (Test-Path -LiteralPath $portable) { return $portable }
+
+  throw "Falta '$Name'. Instala las herramientas de linea de comandos de PostgreSQL 17."
 }
 
-Require-Command 'docker' 'Instala Docker Desktop y comproba que este iniciado.'
-Require-Command 'supabase' 'Instala la CLI oficial de Supabase y volve a ejecutar el script.'
-
-docker info *> $null
-if ($LASTEXITCODE -ne 0) {
-  throw 'Docker esta instalado pero el motor no esta iniciado.'
-}
+$pgDump = Resolve-PostgresTool 'pg_dump'
+$pgDumpAll = Resolve-PostgresTool 'pg_dumpall'
 
 if ($PreflightOnly) {
-  Write-Host 'OK: Docker y Supabase CLI estan disponibles.'
+  Write-Host "OK: herramientas PostgreSQL disponibles ($(& $pgDump --version))."
   exit 0
 }
 
 $dbUrl = $env:SHORONPO_DB_URL
-if ([string]::IsNullOrWhiteSpace($dbUrl)) {
-  throw 'Defini SHORONPO_DB_URL solo para esta sesion con la cadena de conexion copiada desde Supabase > Connect. No la guardes en archivos ni en Git.'
-}
-if ($dbUrl -notmatch [regex]::Escape($projectRef)) {
-  throw "La conexion no pertenece al proyecto esperado ($projectRef). Backup cancelado."
-}
-
-$stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
-$destination = Join-Path $BackupRoot $stamp
-New-Item -ItemType Directory -Path $destination -Force | Out-Null
-
 try {
-  & supabase db dump --db-url $dbUrl --file (Join-Path $destination 'roles.sql') --role-only
+  if ([string]::IsNullOrWhiteSpace($dbUrl)) {
+    throw 'Defini SHORONPO_DB_URL solo para esta sesion con la cadena de conexion copiada desde Supabase > Connect. No la guardes en archivos ni en Git.'
+  }
+  if ($dbUrl -notmatch [regex]::Escape($projectRef)) {
+    throw "La conexion no pertenece al proyecto esperado ($projectRef). Backup cancelado."
+  }
+
+  $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+  $destination = Join-Path $BackupRoot $stamp
+  New-Item -ItemType Directory -Path $destination -Force | Out-Null
+
+  & $pgDumpAll --dbname=$dbUrl --roles-only --no-role-passwords --file=(Join-Path $destination 'roles.sql')
   if ($LASTEXITCODE -ne 0) { throw 'Fallo el dump de roles.' }
 
-  & supabase db dump --db-url $dbUrl --file (Join-Path $destination 'schema.sql')
+  & $pgDump --dbname=$dbUrl --schema-only --no-owner --no-privileges --file=(Join-Path $destination 'schema.sql')
   if ($LASTEXITCODE -ne 0) { throw 'Fallo el dump del esquema.' }
 
-  & supabase db dump --db-url $dbUrl --file (Join-Path $destination 'data.sql') --data-only --use-copy
+  & $pgDump --dbname=$dbUrl --data-only --no-owner --no-privileges --file=(Join-Path $destination 'data.sql')
   if ($LASTEXITCODE -ne 0) { throw 'Fallo el dump de datos.' }
 
   $files = Get-ChildItem -LiteralPath $destination -File
@@ -56,7 +55,7 @@ try {
   $manifest = [ordered]@{
     project_ref = $projectRef
     created_at_utc = (Get-Date).ToUniversalTime().ToString('o')
-    tool_version = (& supabase --version | Select-Object -First 1)
+    tool_version = (& $pgDump --version | Select-Object -First 1)
     files = @($files | Sort-Object Name | ForEach-Object {
       [ordered]@{
         name = $_.Name
