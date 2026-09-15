@@ -23,6 +23,12 @@ Para producción se debe adoptar una de estas opciones:
 
 Nunca deben versionarse contraseñas de base de datos, tokens, claves `service_role` ni archivos de backup con datos reales.
 
+## Conector tSpoonLab — Fase 4
+
+La función `functions/tspoonlab-health` verifica el acceso de sólo lectura a tSpoonLab y actualiza `public.tspoonlab_connector_status`. El token vive exclusivamente en el secreto de Edge Functions `TSPOONLAB_REMEMBERME`; nunca se persiste en PostgreSQL ni se devuelve al frontend.
+
+Si tSpoonLab responde `401`, el estado pasa a `AUTH_EXPIRED` y el proceso se detiene. La recuperación consiste en renovar el token desde el extractor local autorizado, actualizar el secreto y repetir el health check. La invocación exige además `SHORONPO_SYNC_TRIGGER_SECRET` mediante el header `x-shoronpo-sync-key`.
+
 ## Rollback del frontend
 
 El tag Git `pre-supabase-cutover-2026-09-15` conserva el frontend anterior en el commit `a52efc9`. Su Apps Script fue archivado después del corte y debe reactivarse explícitamente si alguna vez se utiliza ese rollback.
