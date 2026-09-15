@@ -17,6 +17,18 @@ function Resolve-PostgresTool([string]$Name) {
   throw "Falta '$Name'. Instala las herramientas de linea de comandos de PostgreSQL 17."
 }
 
+function Get-Sha256([string]$Path) {
+  $stream = [IO.File]::OpenRead($Path)
+  try {
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try {
+      return ([BitConverter]::ToString($sha.ComputeHash($stream))).Replace('-', '').ToLowerInvariant()
+    }
+    finally { $sha.Dispose() }
+  }
+  finally { $stream.Dispose() }
+}
+
 $pgDump = Resolve-PostgresTool 'pg_dump'
 $pgDumpAll = Resolve-PostgresTool 'pg_dumpall'
 
@@ -60,7 +72,7 @@ try {
       [ordered]@{
         name = $_.Name
         bytes = $_.Length
-        sha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $_.FullName).Hash.ToLowerInvariant()
+        sha256 = Get-Sha256 $_.FullName
       }
     })
   }
