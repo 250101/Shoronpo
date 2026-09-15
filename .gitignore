@@ -3,3 +3,4 @@ Shoronpo-Backups/
 backups/
 *.dump
 *.backup
+supabase/.temp/
