@@ -38,13 +38,13 @@ try {
   $destination = Join-Path $BackupRoot $stamp
   New-Item -ItemType Directory -Path $destination -Force | Out-Null
 
-  & $pgDumpAll --dbname=$dbUrl --roles-only --no-role-passwords --file=(Join-Path $destination 'roles.sql')
+  & $pgDumpAll --dbname=$dbUrl --roles-only --no-role-passwords --file (Join-Path $destination 'roles.sql')
   if ($LASTEXITCODE -ne 0) { throw 'Fallo el dump de roles.' }
 
-  & $pgDump --dbname=$dbUrl --schema-only --no-owner --no-privileges --file=(Join-Path $destination 'schema.sql')
+  & $pgDump --dbname=$dbUrl --schema-only --no-owner --no-privileges --file (Join-Path $destination 'schema.sql')
   if ($LASTEXITCODE -ne 0) { throw 'Fallo el dump del esquema.' }
 
-  & $pgDump --dbname=$dbUrl --data-only --no-owner --no-privileges --file=(Join-Path $destination 'data.sql')
+  & $pgDump --dbname=$dbUrl --data-only --no-owner --no-privileges --file (Join-Path $destination 'data.sql')
   if ($LASTEXITCODE -ne 0) { throw 'Fallo el dump de datos.' }
 
   $files = Get-ChildItem -LiteralPath $destination -File
