@@ -344,7 +344,7 @@ input[type=file]{display:none}
       <div class="hist-preview">
         <div class="hist-preview-title">📊 Histórico guardado <span id="histPreviewCount" style="font-size:11px;font-weight:400;color:var(--text3)"></span></div>
         <div id="histPreviewContent">
-          <div class="hist-preview-empty">Conectá el Apps Script para ver el histórico</div>
+          <div class="hist-preview-empty">No hay inventarios guardados en la base de datos</div>
         </div>
       </div>
     </div>
@@ -484,7 +484,7 @@ input[type=file]{display:none}
     </div>
     <div class="empty" id="prodEmpty">
       <div class="empty-icon">📈</div>
-      <div>Conectá el Apps Script para ver la evolución de productos</div>
+      <div>No hay datos disponibles para mostrar la evolución de productos</div>
     </div>
   </div>
 
@@ -510,7 +510,7 @@ input[type=file]{display:none}
     </div>
     <div class="empty" id="rankEmpty">
       <div class="empty-icon">🏆</div>
-      <div>Conectá el Apps Script para ver los rankings</div>
+      <div>No hay datos disponibles para calcular los rankings</div>
     </div>
   </div>
 
@@ -521,7 +521,7 @@ input[type=file]{display:none}
         <button class="conn-btn" style="background:var(--blue);border-color:var(--blue);color:#fff;font-size:11px;padding:5px 12px;border-radius:6px;cursor:pointer;border:none" onclick="fetchHistorico().then(()=>{renderGestion();showNotice('Histórico actualizado.','ok')})">↺ Actualizar</button>
       </div>
       <div id="gestionContent">
-        <div class="empty"><div class="empty-icon">⚙️</div><div>Conectá el Apps Script para ver las semanas guardadas</div></div>
+        <div class="empty"><div class="empty-icon">⚙️</div><div>No hay semanas guardadas en la base de datos</div></div>
       </div>
     </div>
   </div>
@@ -531,7 +531,7 @@ input[type=file]{display:none}
   <div class="view" id="view-comparar">
     <div class="card card-full" id="compararCard">
       <div class="card-title">Comparar dos inventarios</div>
-      <div id="compararEmpty" class="empty"><div class="empty-icon">🔀</div><div>Conectá el Apps Script para ver las semanas disponibles</div></div>
+      <div id="compararEmpty" class="empty"><div class="empty-icon">🔀</div><div>Se necesitan al menos dos semanas guardadas para comparar</div></div>
       <div id="compararSelector" style="display:none">
         <div style="display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap;margin-bottom:24px">
           <div>
@@ -599,11 +599,7 @@ let currentData=[], historico={quincenas:[],productos:[]}, conciliaciones={}, cu
 let activeFilter='all', sortCol='impacto', sortAsc=false, searchTerm='';
 let gaugeInst=null, histInst=null, histOnlyInst=null, scatterInst=null, panelChartInst=null;
 
-localStorage.removeItem('shoronpo_api_url');
-
 // ── Conexión ─────────────────────────────────────────────────
-function saveApiUrl(){ /* URL hardcodeada */ }
-
 async function retryConnection(){
   document.getElementById('btnReconectar').style.display='none';
   document.getElementById('connLabel').textContent='Reconectando...';
@@ -1686,10 +1682,7 @@ function showNotice(msg,type='ok'){const n=document.getElementById('notice');n.t
 function showLoading(txt){document.getElementById('loadingText').textContent=txt||'Cargando...';document.getElementById('loadingOverlay').classList.add('show');}
 function hideLoading(){document.getElementById('loadingOverlay').classList.remove('show');}
 
-// ── Auto-conectar al iniciar ──────────────────────────────────
 // ── Conciliación ──────────────────────────────────────────────
-function syncConcToSheets(){ /* retirado: Supabase es la fuente de verdad */ }
-
 function buildAllRows(){
   const rows=[];
   Object.entries(conciliaciones).forEach(([key,conc])=>{
@@ -1709,7 +1702,7 @@ function buildAllRows(){
   return rows;
 }
 
-async function addExpToSheets(semana, producto, exp){
+async function addExpToDatabase(semana, producto, exp){
   const histProd=historico.productos.find(p=>p.producto===producto&&p.quincena===semana);
   if(!histProd?.lineId) throw new Error('No se encontró la línea de inventario en la base de datos.');
   const {error}=await supabaseClient.from('inventory_reconciliations').insert({
@@ -1719,7 +1712,7 @@ async function addExpToSheets(semana, producto, exp){
   if(error) throw error;
 }
 
-async function delExpFromSheets(semana, producto, exp){
+async function delExpFromDatabase(semana, producto, exp){
   if(!exp.id) throw new Error('La conciliación no tiene ID.');
   const {error}=await supabaseClient.from('inventory_reconciliations').delete().eq('id',exp.id);
   if(error) throw error;
@@ -1892,7 +1885,7 @@ async function guardarExplicacion(producto, semana){
   conc.estado=nuevoPendiente<=0.01?'CONCILIADA':nuevoExplicado>0?'PARCIAL':'PENDIENTE';
   saveConciliaciones();
   try{
-    await addExpToSheets(realSemana, producto, exp);
+    await addExpToDatabase(realSemana, producto, exp);
     showNotice('Explicación guardada en la base de datos.','ok');
   }catch(e){
     // Revertir la interfaz si la base de datos no confirmó el guardado.
@@ -1929,7 +1922,7 @@ async function borrarExplicacion(producto, semana, idx){
   }
   saveConciliaciones();
   try{
-    await delExpFromSheets(semana, producto, removedExp);
+    await delExpFromDatabase(semana, producto, removedExp);
     showNotice('Explicación eliminada de la base de datos.','ok');
   }catch(e){
     // Restaurar en su posición si la base de datos no confirmó la eliminación.
