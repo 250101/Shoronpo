@@ -1,0 +1,5 @@
+# Backups locales con datos reales
+Shoronpo-Backups/
+backups/
+*.dump
+*.backup
