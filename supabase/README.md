@@ -29,6 +29,16 @@ La función `functions/tspoonlab-health` verifica el acceso de sólo lectura a t
 
 Si tSpoonLab responde `401`, el estado pasa a `AUTH_EXPIRED` y el proceso se detiene. La recuperación consiste en renovar el token desde el extractor local autorizado, actualizar el secreto y repetir el health check. La invocación exige además `SHORONPO_SYNC_TRIGGER_SECRET` mediante el header `x-shoronpo-sync-key`.
 
+## Sincronización manual de existencias — Fase 5
+
+`functions/tspoonlab-sync-stock` importa, en modo de sólo lectura, las existencias de los almacenes de tSpoonLab. Cada llamada exige el secreto interno y `x-idempotency-key`; repetir la misma clave devuelve la corrida existente y no duplica snapshots.
+
+- `tspoon_sync_runs`: auditoría y resultado de cada corrida.
+- `tspoon_sync_errors`: errores sanitizados, sin payloads ni credenciales.
+- `tspoon_stock_snapshots`: cantidades normalizadas por almacén y producto.
+
+La cantidad total se calcula como `quantityInventory + quantityInput + quantityOutput`, tratando cada `null` como ausencia/0 para el total pero conservando el `null` original en su columna. Ante `401`, la corrida falla de forma cerrada y el conector pasa a `AUTH_EXPIRED`; una corrida posterior correcta lo devuelve a `HEALTHY`.
+
 ## Rollback del frontend
 
 El tag Git `pre-supabase-cutover-2026-09-15` conserva el frontend anterior en el commit `a52efc9`. Su Apps Script fue archivado después del corte y debe reactivarse explícitamente si alguna vez se utiliza ese rollback.

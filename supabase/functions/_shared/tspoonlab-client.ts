@@ -122,6 +122,21 @@ export class TspoonlabClient {
     return true
   }
 
+  async listStores() {
+    const stores = await this.get('listStoresPaged', { rows: 100, start: 0, filter: '' })
+    if (!Array.isArray(stores)) throw new TspoonlabError('Formato de almacenes inesperado', 'INVALID_RESPONSE')
+    return stores
+  }
+
+  async getStock(storeId: string, limit = 5000) {
+    if (!storeId) throw new TspoonlabError('Almacen sin identificador', 'INVALID_RESPONSE')
+    const stock = await this.get(`store/${encodeURIComponent(storeId)}/inventory/last/components/num/${limit}`)
+    if (!stock || typeof stock !== 'object' || Array.isArray(stock) || !Array.isArray((stock as { listComponent?: unknown }).listComponent)) {
+      throw new TspoonlabError('Formato de existencias inesperado', 'INVALID_RESPONSE')
+    }
+    return stock as { listComponent: unknown[] }
+  }
+
   toJSON() {
     return { timezone: this.options.timezone ?? 'Europe/Madrid' }
   }

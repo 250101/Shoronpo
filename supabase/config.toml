@@ -3,3 +3,5 @@ project_id = "htuearldqvzqohoxwmdp"
 [functions.tspoonlab-health]
 verify_jwt = false
 
+[functions.tspoonlab-sync-stock]
+verify_jwt = false
