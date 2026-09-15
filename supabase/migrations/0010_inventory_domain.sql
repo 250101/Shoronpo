@@ -1,5 +1,5 @@
 -- Shoronpo - Fase 2: dominio de inventario.
--- Requiere las migraciones 0001-0009 de seguridad y ubicaciones.
+-- Requiere las migraciones 0001-0008 de seguridad y ubicaciones.
 
 create type public.inventory_period_status as enum ('DRAFT', 'CLOSED');
 create type public.inventory_deviation_status as enum ('COINCIDE', 'LEVE', 'ELEVADA');
