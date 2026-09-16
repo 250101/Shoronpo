@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.tspoonlab-sync-stock]
 verify_jwt = false
+
+[functions.tspoonlab-sync-productions]
+verify_jwt = false

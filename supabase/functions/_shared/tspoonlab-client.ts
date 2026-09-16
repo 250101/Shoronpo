@@ -137,6 +137,23 @@ export class TspoonlabClient {
     return stock as { listComponent: unknown[] }
   }
 
+  async listProductions(searchType = 12, start = 0, rows = 100) {
+    const data = await this.get('productionComponentList', {
+      searchType, search: '', onlyDishes: false, includeFromPreviousDay: true, start, rows,
+    })
+    if (!data || typeof data !== 'object' || Array.isArray(data) || !Array.isArray((data as { listComponents?: unknown }).listComponents)) {
+      throw new TspoonlabError('Formato de producciones inesperado', 'INVALID_RESPONSE')
+    }
+    return (data as { listComponents: Array<Record<string, unknown>> }).listComponents
+  }
+
+  async getProduction(productionId: string) {
+    if (!productionId) throw new TspoonlabError('Produccion sin identificador', 'INVALID_RESPONSE')
+    const data = await this.get(`productionComponent/${encodeURIComponent(productionId)}`)
+    if (!data || typeof data !== 'object' || Array.isArray(data)) throw new TspoonlabError('Formato de produccion inesperado', 'INVALID_RESPONSE')
+    return data
+  }
+
   toJSON() {
     return { timezone: this.options.timezone ?? 'Europe/Madrid' }
   }
