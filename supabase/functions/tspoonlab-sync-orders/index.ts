@@ -81,11 +81,12 @@ Deno.serve(async (req) => {
             delivery.external_id,
           )).error;
           if (e) throw new Error("LINE_DELETE_FAILED");
-          const source = (detail as { listComandes: unknown[] }).listComandes
-              .find((x) =>
-                (x as Record<string, unknown>).id === delivery.external_id
-              ),
-            lines = mapOrderLines(source, run.id);
+          const rawDeliveryId = delivery.external_id.slice(
+              `${order.external_id}:`.length,
+            ),
+            source = (detail as { listComandes: unknown[] }).listComandes
+              .find((x) => (x as Record<string, unknown>).id === rawDeliveryId),
+            lines = mapOrderLines(source, run.id, order.external_id);
           if (lines.length) {
             e = (await db.from("tspoon_order_lines").insert(lines)).error;
             if (e) throw new Error("LINE_WRITE_FAILED");

@@ -23,10 +23,13 @@ const order = {
 };
 test("normaliza pedido y entrega", () => {
   assert.equal(mapOrder(order, "r").external_id, "o1");
-  assert.equal(mapDeliveries(order, "r")[0].customer_name, "Restaurante");
+  const mapped = mapDeliveries(order, "r")[0];
+  assert.equal(mapped.customer_name, "Restaurante");
+  assert.equal(mapped.external_id, "o1:d1");
 });
 test("normaliza salida y lotes", () => {
-  const x = mapOrderLines(delivery, "r")[0];
+  const x = mapOrderLines(delivery, "r", "o1")[0];
+  assert.equal(x.delivery_external_id, "o1:d1");
   assert.equal(x.is_sent, true);
   assert.deepEqual(x.lots, ["2026.09.16"]);
 });

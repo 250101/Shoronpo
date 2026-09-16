@@ -51,7 +51,7 @@ export function mapDeliveries(detailInput: unknown, runId: string) {
       ? x.customer as R
       : {};
     return {
-      external_id: req(x.id, "entrega.id"),
+      external_id: `${orderId}:${req(x.id, "entrega.id")}`,
       order_external_id: orderId,
       customer_external_id: opt(customer.id ?? x.idCustomerVenda),
       customer_name: opt(customer.descr),
@@ -66,9 +66,16 @@ export function mapDeliveries(detailInput: unknown, runId: string) {
   });
 }
 
-export function mapOrderLines(deliveryInput: unknown, runId: string) {
+export function mapOrderLines(
+  deliveryInput: unknown,
+  runId: string,
+  orderExternalId?: string,
+) {
   const d = obj(deliveryInput, "entrega");
-  const deliveryId = req(d.id, "entrega.id");
+  const rawDeliveryId = req(d.id, "entrega.id");
+  const deliveryId = orderExternalId
+    ? `${req(orderExternalId, "pedido.id")}:${rawDeliveryId}`
+    : rawDeliveryId;
   if (!Array.isArray(d.listComponents)) {
     throw new TspoonlabError("lineas invalidas", "INVALID_RESPONSE");
   }
