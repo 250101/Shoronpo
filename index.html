@@ -321,21 +321,24 @@ input[type=file]{display:none}
 
 <!-- Nav (se muestra al cargar datos) -->
 <div class="nav" id="mainNav">
-  <div class="nav-tab active" onclick="showView('executive',this)">📊 Executive</div>
-  <div class="nav-tab" onclick="showView('semana',this)">📋 Semana</div>
-  <div class="nav-tab" onclick="showView('productos',this)">📈 Productos</div>
-  <div class="nav-tab" onclick="showView('rankings',this)">🏆 Rankings</div>
-  <div class="nav-tab" onclick="showView('gestion',this)">⚙️ Semanas</div>
-  <div class="nav-tab" onclick="showView('comparar',this)">🔀 Comparar</div>
+  <div class="nav-tab active" data-view="executive" onclick="showView('executive',this)">📊 Executive</div>
+  <div class="nav-tab" data-view="semana" onclick="showView('semana',this)">📋 Semana</div>
+  <div class="nav-tab" data-view="productos" onclick="showView('productos',this)">📈 Productos</div>
+  <div class="nav-tab" data-view="rankings" onclick="showView('rankings',this)">🏆 Rankings</div>
+  <div class="nav-tab" data-view="gestion" onclick="showView('gestion',this)">⚙️ Semanas</div>
+  <div class="nav-tab" data-view="comparar" onclick="showView('comparar',this)">🔀 Comparar</div>
 </div>
 
 <div class="wrapper">
   <div class="notice" id="notice"></div>
+  <div class="empty" id="roleDenied" style="display:none">
+    <div class="empty-icon">🔒</div><div>Tu rol no tiene acceso al módulo de inventarios.</div>
+  </div>
 
   <!-- Landing (sin inventario cargado) -->
   <div id="landingSection">
     <div class="landing">
-      <div class="upload-zone" id="uploadZone" onclick="document.getElementById('fileInput').click()">
+      <div class="upload-zone" id="uploadZone" data-write-action onclick="document.getElementById('fileInput').click()">
         <div class="upload-icon">📂</div>
         <h3>Subí el export del inventario</h3>
         <p>Arrastrá o hacé clic · archivo .xlsx del sistema</p>
@@ -397,7 +400,7 @@ input[type=file]{display:none}
         </div>
         <div class="chart-wrap"><canvas id="histChart"></canvas></div>
       </div>
-      <div class="actions" id="execActions">
+      <div class="actions" id="execActions" data-write-action>
         <div style="display:flex;gap:8px">
           <button class="btn btn-danger" onclick="resetDashboard()">✕ Limpiar inventario</button>
           <button class="btn" onclick="document.getElementById('fileInput').click()">↑ Cargar otro export</button>
@@ -731,7 +734,7 @@ function renderHistOnly(){
 }
 
 function renderNavVisibility(){
-  if(historico.quincenas&&historico.quincenas.length>0){
+  if(canViewInventory()&&historico.quincenas&&historico.quincenas.length>0){
     document.getElementById('mainNav').style.display='flex';
   }
 }
@@ -751,7 +754,7 @@ function renderGestion(){
       <tbody>${sorted.map(q=>`
         <tr>
           <td style="font-weight:700">${q.quincena}</td>
-          <td style="color:var(--text3)">${q.fecha?new Date(q.fecha).toLocaleDateString('es-AR',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'}):'-'}</td>
+          <td style="color:var(--text3)">${q.fecha?new Date(q.fecha).toLocaleDateString('es-ES',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit',timeZone:'Europe/Madrid'}):'-'}</td>
           <td>${q.total}</td>
           <td><span class="pill p-green">${q.coincide}</span></td>
           <td><span class="pill p-amber">${q.leve}</span></td>
@@ -1474,6 +1477,7 @@ function renderAll(){
 
 // ── Cerrar semana ───────────────────────────────────────────
 async function cerrarQuincena(){
+  if(!canManageInventory()){showNotice('Tu rol tiene acceso de solo lectura.','err');return;}
   if(!currentData.length){showNotice('Primero cargá un export.','err');return;}
   const q=prompt('Nombre de la semana (ej: Q1 Jul 2026):');
   if(!q) return;
@@ -1505,6 +1509,7 @@ async function cerrarQuincena(){
 
 // ── Procesar archivo ──────────────────────────────────────────
 async function processFile(file){
+  if(!canManageInventory()){showNotice('Tu rol no puede cargar inventarios.','err');return;}
   showNotice('Leyendo archivo...','inf');
   try{
     const data=await parseXLSX(file);
@@ -1809,7 +1814,7 @@ function abrirConciliacion(producto, semana){
       <div><span style="color:var(--text2)">${e.causa}</span>${e.comentario?`<div style="font-size:10px;color:var(--text3);margin-top:1px">${e.comentario}</div>`:''}</div>
       <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
         <span style="font-weight:600">${e.cantidad.toFixed(2)} ${unidad}</span>
-        <button onclick="borrarExplicacion('${producto.replace(/'/g,"\\'")}','${semana}',${i})" style="font-size:10px;padding:2px 6px;border-radius:4px;border:0.5px solid var(--red-b);background:var(--red-bg);color:var(--red-text);cursor:pointer">✕</button>
+        ${canReconcile()?`<button onclick="borrarExplicacion('${producto.replace(/'/g,"\\'")}','${semana}',${i})" style="font-size:10px;padding:2px 6px;border-radius:4px;border:0.5px solid var(--red-b);background:var(--red-bg);color:var(--red-text);cursor:pointer">✕</button>`:''}
       </div>
     </div>`).join('');
 
@@ -1838,7 +1843,7 @@ function abrirConciliacion(producto, semana){
         </div>
       </div>
       ${histRows?`<div style="margin-bottom:10px">${histRows}</div>`:''}
-      ${pendiente>0.01?`
+      ${pendiente>0.01&&canReconcile()?`
       <div style="background:var(--surface2);border:0.5px solid var(--border);border-radius:8px;padding:12px">
         <div style="font-size:12px;font-weight:600;margin-bottom:8px">Agregar explicación</div>
         <div style="margin-bottom:8px">
@@ -1874,6 +1879,7 @@ function abrirConciliacion(producto, semana){
 }
 
 async function guardarExplicacion(producto, semana){
+  if(!canReconcile()){showNotice('Tu rol tiene acceso de solo lectura.','err');return;}
   const causa=document.getElementById('concCausa')?.value;
   const cantStr=document.getElementById('concCantidad')?.value;
   const comentario=document.getElementById('concComentario')?.value||'';
@@ -1934,6 +1940,7 @@ async function guardarExplicacion(producto, semana){
 
 
 async function borrarExplicacion(producto, semana, idx){
+  if(!canReconcile()){showNotice('Tu rol tiene acceso de solo lectura.','err');return;}
   const key=getConcKey(producto,semana);
   if(!conciliaciones[key]) return;
   const removedExp=conciliaciones[key].explicaciones.splice(idx,1)[0];
@@ -2012,6 +2019,23 @@ const supabaseClient=window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHA
 });
 let authenticatedUser=null;
 
+function hasRole(...roles){
+  return roles.some(role=>authenticatedUser?.roles?.includes(role));
+}
+
+function canViewInventory(){return hasRole('ADMINISTRADOR','DIRECCION','OBRADOR');}
+function canManageInventory(){return hasRole('ADMINISTRADOR','OBRADOR');}
+function canReconcile(){return hasRole('ADMINISTRADOR','OBRADOR');}
+
+function applyRoleUi(){
+  const mayView=canViewInventory(),mayWrite=canManageInventory();
+  document.querySelectorAll('[data-write-action]').forEach(el=>el.style.display=mayWrite?'':'none');
+  document.querySelectorAll('#mainNav .nav-tab').forEach(el=>el.style.display=mayView?'':'none');
+  document.getElementById('roleDenied').style.display=mayView?'none':'block';
+  document.getElementById('landingSection').style.display=mayView?'':'none';
+  if(!mayView) document.getElementById('mainNav').style.display='none';
+}
+
 function authMessage(message){
   const el=document.getElementById('authError');
   el.textContent=message||'';el.style.display=message?'block':'none';
@@ -2038,6 +2062,7 @@ async function activateSession(session){
   document.getElementById('authRole').textContent=access.roles.join(' · ');
   document.getElementById('authUser').classList.add('show');
   document.getElementById('authGate').classList.add('hidden');
+  applyRoleUi();
   await testConnection();
   return true;
 }
