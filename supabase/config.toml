@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.tspoonlab-sync-productions]
 verify_jwt = false
+
+[functions.tspoonlab-sync-orders]
+verify_jwt = false
