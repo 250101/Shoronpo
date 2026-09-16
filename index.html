@@ -327,6 +327,7 @@ input[type=file]{display:none}
   <div class="nav-tab" data-view="rankings" onclick="showView('rankings',this)">🏆 Rankings</div>
   <div class="nav-tab" data-view="gestion" onclick="showView('gestion',this)">⚙️ Semanas</div>
   <div class="nav-tab" data-view="comparar" onclick="showView('comparar',this)">🔀 Comparar</div>
+  <div class="nav-tab" data-view="sistema" onclick="showView('sistema',this)">🛡️ Sistema</div>
 </div>
 
 <div class="wrapper">
@@ -574,6 +575,16 @@ input[type=file]{display:none}
           </div>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- ── VISTA SISTEMA ── -->
+  <div class="view" id="view-sistema">
+    <div class="card card-full">
+      <div class="card-title">Estado operativo
+        <button class="conn-btn" style="background:var(--blue);border-color:var(--blue);color:#fff;font-size:11px;padding:5px 12px;border-radius:6px;cursor:pointer;border:none" onclick="renderSystemStatus()">↺ Actualizar</button>
+      </div>
+      <div id="systemStatusContent"><div class="empty">Consultá el estado de las sincronizaciones.</div></div>
     </div>
   </div>
 
@@ -1383,6 +1394,48 @@ function searchDetail(v){searchTerm=v.toLowerCase();renderDetail(currentData);}
 function searchProductos(v){const map={};historico.productos.forEach(p=>{if(!map[p.producto])map[p.producto]={producto:p.producto,familia:p.familia,registros:[]};map[p.producto].registros.push({quincena:p.quincena,fecha:p.fecha,pct:parseFloat(p.pct)||0,impacto:parseFloat(p.impacto)||0,estado:p.estado});});renderProdTable(Object.values(map),v.toLowerCase());}
 function sortTable(col){if(sortCol===col)sortAsc=!sortAsc;else{sortCol=col;sortAsc=false;}renderDetail(currentData);}
 
+function formatMadridDate(value){
+  return value?new Date(value).toLocaleString('es-ES',{timeZone:'Europe/Madrid',day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):'—';
+}
+
+function escapeHtml(value){
+  return String(value??'').replace(/[&<>'"]/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
+}
+
+async function renderSystemStatus(){
+  const target=document.getElementById('systemStatusContent');
+  target.innerHTML='<div class="empty"><span class="spinner"></span> Consultando sincronizaciones…</div>';
+  const {data:runs,error}=await supabaseClient.from('tspoon_sync_runs')
+    .select('block,status,trigger_type,records_processed,started_at,finished_at,error_code')
+    .order('started_at',{ascending:false}).limit(30);
+  if(error){target.innerHTML=`<div class="empty" style="color:var(--red)">No se pudo consultar el estado: ${escapeHtml(error.message)}</div>`;return;}
+  let connector=null;
+  if(hasRole('ADMINISTRADOR')){
+    const response=await supabaseClient.from('tspoonlab_connector_status')
+      .select('status,last_checked_at,last_success_at,last_error_code').eq('singleton',true).maybeSingle();
+    connector=response.data;
+  }
+  const latest={};
+  (runs||[]).forEach(run=>{if(!latest[run.block]) latest[run.block]=run;});
+  const blocks=['STOCK','PRODUCTION','ORDER'];
+  const cards=blocks.map(block=>{
+    const run=latest[block];
+    if(!run) return `<div class="kpi-card"><div class="kpi-label">${block}</div><div class="kpi-val" style="font-size:18px;color:var(--text3)">Sin datos</div></div>`;
+    const age=Date.now()-new Date(run.started_at).getTime();
+    const healthy=run.status==='SUCCEEDED'&&age<8*60*60*1000;
+    const color=healthy?'#22c55e':run.status==='FAILED'?'var(--red)':'var(--amber)';
+    const label=healthy?'Operativo':run.status==='FAILED'?'Falló':'Atrasado';
+    return `<div class="kpi-card"><div class="kpi-label">${block}</div><div class="kpi-val" style="font-size:18px;color:${color}">${label}</div><div class="kpi-sub">${formatMadridDate(run.started_at)} · ${run.records_processed||0} registros${run.error_code?` · ${escapeHtml(run.error_code)}`:''}</div></div>`;
+  }).join('');
+  const connectorHtml=connector?`<div class="gestion-info"><strong>Conector tSpoonLab:</strong> ${escapeHtml(connector.status)} · última respuesta correcta ${formatMadridDate(connector.last_success_at)}${connector.last_error_code?` · error ${escapeHtml(connector.last_error_code)}`:''}</div>`:'';
+  const failed=(runs||[]).filter(run=>run.status==='FAILED').slice(0,5);
+  target.innerHTML=`<div class="kpi-grid" style="margin-bottom:18px">${cards}</div>${connectorHtml}
+    <div class="card-title" style="margin-top:20px">Últimas ejecuciones</div>
+    <div class="tbl-wrap"><table class="atbl"><thead><tr><th>Bloque</th><th>Inicio</th><th>Estado</th><th>Registros</th><th>Origen</th></tr></thead><tbody>
+    ${(runs||[]).slice(0,12).map(run=>`<tr><td>${escapeHtml(run.block)}</td><td>${formatMadridDate(run.started_at)}</td><td><span class="pill ${run.status==='SUCCEEDED'?'p-green':run.status==='FAILED'?'p-red':'p-amber'}">${escapeHtml(run.status)}</span></td><td>${run.records_processed||0}</td><td>${escapeHtml(run.trigger_type)}</td></tr>`).join('')||'<tr><td colspan="5">Sin ejecuciones registradas</td></tr>'}
+    </tbody></table></div>${failed.length?`<div class="gestion-info" style="border-color:var(--red-b)"><strong>Atención:</strong> hay ${failed.length} fallo${failed.length===1?'':'s'} reciente${failed.length===1?'':'s'} en las últimas 30 ejecuciones.</div>`:''}`;
+}
+
 // ── Nav ───────────────────────────────────────────────────────
 function showView(id,tab){
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
@@ -1393,6 +1446,7 @@ function showView(id,tab){
   if(id==='rankings') renderRankings();
   if(id==='gestion') renderGestion();
   if(id==='comparar') renderCompararSelector();
+  if(id==='sistema') renderSystemStatus();
 }
 
 // ── Render all ────────────────────────────────────────────────
