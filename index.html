@@ -286,6 +286,14 @@ input[type=file]{display:none}
     <button class="auth-submit" id="authSubmit" type="submit">Ingresar</button>
     <div class="auth-error" id="authError" role="alert"></div>
   </form>
+  <form class="auth-card" id="passwordResetForm" hidden>
+    <h1>Crear nueva contraseña</h1>
+    <p>Elegí una contraseña nueva para tu cuenta de Shoronpo.</p>
+    <label class="auth-field"><span>Nueva contraseña</span><input id="newPassword" type="password" autocomplete="new-password" minlength="12" required></label>
+    <label class="auth-field"><span>Repetir contraseña</span><input id="confirmPassword" type="password" autocomplete="new-password" minlength="12" required></label>
+    <button class="auth-submit" id="passwordResetSubmit" type="submit">Guardar contraseña</button>
+    <div class="auth-error" id="passwordResetError" role="alert"></div>
+  </form>
 </div>
 
 <!-- Loading overlay -->
@@ -2074,9 +2082,10 @@ function getImpactoConc(data){
 const SUPABASE_URL='https://htuearldqvzqohoxwmdp.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY='sb_publishable_KZKbJob8_QwdWs3VUPVKgw_6IVK0LQV';
 const supabaseClient=window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY,{
-  auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:false}
+  auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}
 });
 let authenticatedUser=null;
+let passwordRecoveryMode=false;
 
 function hasRole(...roles){
   return roles.some(role=>authenticatedUser?.roles?.includes(role));
@@ -2098,6 +2107,19 @@ function applyRoleUi(){
 function authMessage(message){
   const el=document.getElementById('authError');
   el.textContent=message||'';el.style.display=message?'block':'none';
+}
+
+function passwordResetMessage(message){
+  const el=document.getElementById('passwordResetError');
+  el.textContent=message||'';el.style.display=message?'block':'none';
+}
+
+function showPasswordReset(){
+  passwordRecoveryMode=true;
+  document.getElementById('authGate').classList.remove('hidden');
+  document.getElementById('authForm').hidden=true;
+  document.getElementById('passwordResetForm').hidden=false;
+  passwordResetMessage('');
 }
 
 async function loadAuthorization(user){
@@ -2143,6 +2165,37 @@ document.getElementById('authForm').addEventListener('submit',async event=>{
   }finally{button.disabled=false;button.textContent='Ingresar';}
 });
 
+document.getElementById('passwordResetForm').addEventListener('submit',async event=>{
+  event.preventDefault();passwordResetMessage('');
+  const password=document.getElementById('newPassword').value;
+  const confirmation=document.getElementById('confirmPassword').value;
+  if(password.length<12){passwordResetMessage('La contraseña debe tener al menos 12 caracteres.');return;}
+  if(password!==confirmation){passwordResetMessage('Las contraseñas no coinciden.');return;}
+  const button=document.getElementById('passwordResetSubmit');button.disabled=true;button.textContent='Guardando…';
+  try{
+    const {error}=await supabaseClient.auth.updateUser({password});
+    if(error) throw error;
+    passwordRecoveryMode=false;
+    document.getElementById('newPassword').value='';
+    document.getElementById('confirmPassword').value='';
+    history.replaceState({},document.title,location.pathname);
+    const {data:{session}}=await supabaseClient.auth.getSession();
+    if(!session) throw new Error('La contraseña se actualizó. Iniciá sesión nuevamente.');
+    await activateSession(session);
+    document.getElementById('passwordResetForm').hidden=true;
+    document.getElementById('authForm').hidden=false;
+  }catch(error){passwordResetMessage(error?.message||'No se pudo actualizar la contraseña.');}
+  finally{button.disabled=false;button.textContent='Guardar contraseña';}
+});
+
+supabaseClient.auth.onAuthStateChange((event,session)=>{
+  if(event==='PASSWORD_RECOVERY') showPasswordReset();
+  if(event==='SIGNED_OUT'&&!passwordRecoveryMode){
+    document.getElementById('passwordResetForm').hidden=true;
+    document.getElementById('authForm').hidden=false;
+  }
+});
+
 async function logout(){
   await supabaseClient.auth.signOut();authenticatedUser=null;
   document.getElementById('authUser').classList.remove('show');
@@ -2151,8 +2204,16 @@ async function logout(){
 
 async function initializeApp(){
   try{
+    const hashParams=new URLSearchParams(location.hash.replace(/^#/,''));
+    if(hashParams.get('error')){
+      const description=hashParams.get('error_description')?.replace(/\+/g,' ');
+      authMessage(description==='Email link is invalid or has expired'
+        ?'El enlace venció o ya fue utilizado. Solicitá uno nuevo desde Supabase.'
+        :(description||'El enlace de acceso no es válido.'));
+      history.replaceState({},document.title,location.pathname);
+    }
     const {data:{session}}=await supabaseClient.auth.getSession();
-    if(session) await activateSession(session);
+    if(session&&!passwordRecoveryMode) await activateSession(session);
   }catch(error){
     await supabaseClient.auth.signOut().catch(()=>{});
     authMessage(error?.message||'No se pudo validar la sesión.');
