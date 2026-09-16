@@ -69,7 +69,10 @@ Deno.serve(async request=>{
     db.from('system_alerts').select('id,alert_type,block,severity,status,message,detected_at,resolved_at').eq('status','OPEN').is('telegram_notified_at',null).order('detected_at').limit(10),
     db.from('system_alerts').select('id,alert_type,block,severity,status,message,detected_at,resolved_at').eq('status','RESOLVED').not('telegram_notified_at','is',null).is('telegram_resolution_notified_at',null).order('resolved_at').limit(10),
   ])
-  if(opened.error||resolved.error) return json({error:'ALERT_READ_FAILED'},500)
+  if(opened.error||resolved.error) return json({
+    error:'ALERT_READ_FAILED',
+    detail:opened.error?.message??resolved.error?.message??'UNKNOWN_DATABASE_ERROR',
+  },500)
 
   let sent=0
   for(const alert of (opened.data??[]) as Alert[]){
@@ -90,4 +93,3 @@ Deno.serve(async request=>{
   }
   return json({ok:true,sent})
 })
-
