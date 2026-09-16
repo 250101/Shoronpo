@@ -28,11 +28,11 @@ Deno.serve(async request => {
       for(const detail of details){
         const production=mapProduction(detail,run.id)
         const ingredients=mapProductionIngredients(detail,run.id)
-        const {error:pError}=await db.from('tspoon_productions').upsert(production)
-        if(pError) throw new Error('PRODUCTION_WRITE_FAILED')
-        const {error:dError}=await db.from('tspoon_production_ingredients').delete().eq('production_external_id',production.external_id)
-        if(dError) throw new Error('INGREDIENT_DELETE_FAILED')
-        if(ingredients.length){const {error:iError}=await db.from('tspoon_production_ingredients').insert(ingredients);if(iError) throw new Error('INGREDIENT_WRITE_FAILED')}
+        const {error:replaceError}=await db.rpc('replace_tspoon_production',{
+          p_production:production,
+          p_ingredients:ingredients,
+        })
+        if(replaceError) throw new Error('PRODUCTION_REPLACE_FAILED')
         processed++
       }
     }
@@ -40,7 +40,7 @@ Deno.serve(async request => {
     return json({ok:true,runId:run.id,productionsProcessed:processed})
   }catch(error){
     const raw=error instanceof TspoonlabError?error.code:error instanceof Error?error.message:'SYNC_FAILED'
-    const code=['AUTH_EXPIRED','FORBIDDEN','RATE_LIMITED','UPSTREAM_ERROR','NETWORK_ERROR','INVALID_RESPONSE','PRODUCTION_WRITE_FAILED','INGREDIENT_DELETE_FAILED','INGREDIENT_WRITE_FAILED'].includes(raw)?raw:'SYNC_FAILED'
+    const code=['AUTH_EXPIRED','FORBIDDEN','RATE_LIMITED','UPSTREAM_ERROR','NETWORK_ERROR','INVALID_RESPONSE','PRODUCTION_REPLACE_FAILED'].includes(raw)?raw:'SYNC_FAILED'
     await db.from('tspoon_sync_errors').insert({run_id:run.id,code,message:code})
     await db.from('tspoon_sync_runs').update({status:'FAILED',records_processed:processed,finished_at:new Date().toISOString(),error_code:code}).eq('id',run.id)
     return json({ok:false,status:code,runId:run.id},code==='AUTH_EXPIRED'?401:503)

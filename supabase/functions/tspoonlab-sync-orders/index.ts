@@ -70,28 +70,21 @@ Deno.serve(async (req) => {
       );
       for (const detail of details) {
         const order = mapOrder(detail, run.id),
-          deliveries = mapDeliveries(detail, run.id);
-        let e = (await db.from("tspoon_orders").upsert(order)).error;
-        if (e) throw new Error("ORDER_WRITE_FAILED");
-        for (const delivery of deliveries) {
-          e = (await db.from("tspoon_order_deliveries").upsert(delivery)).error;
-          if (e) throw new Error("DELIVERY_WRITE_FAILED");
-          e = (await db.from("tspoon_order_lines").delete().eq(
-            "delivery_external_id",
-            delivery.external_id,
-          )).error;
-          if (e) throw new Error("LINE_DELETE_FAILED");
-          const rawDeliveryId = delivery.external_id.slice(
+          deliveries = mapDeliveries(detail, run.id),
+          lines = deliveries.flatMap((delivery) => {
+            const rawDeliveryId = delivery.external_id.slice(
               `${order.external_id}:`.length,
-            ),
-            source = (detail as { listComandes: unknown[] }).listComandes
-              .find((x) => (x as Record<string, unknown>).id === rawDeliveryId),
-            lines = mapOrderLines(source, run.id, order.external_id);
-          if (lines.length) {
-            e = (await db.from("tspoon_order_lines").insert(lines)).error;
-            if (e) throw new Error("LINE_WRITE_FAILED");
-          }
-        }
+            );
+            const source = (detail as { listComandes: unknown[] }).listComandes
+              .find((x) => (x as Record<string, unknown>).id === rawDeliveryId);
+            return mapOrderLines(source, run.id, order.external_id);
+          });
+        const { error: replaceError } = await db.rpc("replace_tspoon_order", {
+          p_order: order,
+          p_deliveries: deliveries,
+          p_lines: lines,
+        });
+        if (replaceError) throw new Error("ORDER_REPLACE_FAILED");
         processed++;
       }
     }
@@ -120,10 +113,7 @@ Deno.serve(async (req) => {
           "UPSTREAM_ERROR",
           "NETWORK_ERROR",
           "INVALID_RESPONSE",
-          "ORDER_WRITE_FAILED",
-          "DELIVERY_WRITE_FAILED",
-          "LINE_DELETE_FAILED",
-          "LINE_WRITE_FAILED",
+          "ORDER_REPLACE_FAILED",
         ].includes(raw)
         ? raw
         : "SYNC_FAILED";
