@@ -637,6 +637,12 @@ async function fetchHistorico(){
       )
     `).eq('status','CLOSED').order('recorded_at');
     if(error) throw error;
+    const metricEntries=await Promise.all((periods||[]).map(async period=>{
+      const {data,error}=await supabaseClient.rpc('get_inventory_period_metrics',{p_period_id:period.id});
+      if(error){console.warn('Métricas backend:',error.message);return [period.id,null];}
+      return [period.id,Array.isArray(data)?data[0]:data];
+    }));
+    const metricsByPeriod=Object.fromEntries(metricEntries);
     historico={quincenas:[],productos:[]};conciliaciones={};
     (periods||[]).forEach(period=>{
       const lines=period.inventory_lines||[];
@@ -660,8 +666,9 @@ async function fetchHistorico(){
           estado:pendiente<=0.01?'CONCILIADA':explicado>0?'PARCIAL':'PENDIENTE',explicaciones
         };
       });
-      historico.quincenas.push({quincena:period.label,fecha:period.recorded_at,total:lines.length,
-        coincide:counts.COINCIDE||0,leve:counts.LEVE||0,elevada:counts.ELEVADA||0,impacto:totalImpact});
+      historico.quincenas.push({id:period.id,quincena:period.label,fecha:period.recorded_at,total:lines.length,
+        coincide:counts.COINCIDE||0,leve:counts.LEVE||0,elevada:counts.ELEVADA||0,impacto:totalImpact,
+        metrics:metricsByPeriod[period.id]||null});
     });
     recalcularImpactosHistorico();saveConciliaciones();renderHistPreview();renderNavVisibility();
     renderCompararSelector();actualizarSelectorSemana();
@@ -869,6 +876,23 @@ function calcHealth(data){
   const levePend=resumen.pendientes.filter(d=>d.estado==='LEVE').length;
   const leveParc=resumen.parciales.filter(d=>d.estado==='LEVE').length*0.5;
   return Math.max(0,Math.round(100-((elevPend+elevParc)/tot*60)-((levePend+leveParc)/tot*25)));
+}
+
+function resolveHealthScore(data){
+  const legacy=calcHealth(data);
+  const period=historico.quincenas.find(q=>q.quincena===currentSemana);
+  const backend=Number(period?.metrics?.health_score);
+  if(!Number.isFinite(backend)) return legacy;
+  if(backend!==legacy) console.warn('Paridad health score:',{backend,legacy,period:currentSemana});
+  return backend;
+}
+
+async function refreshPeriodMetrics(label){
+  const period=historico.quincenas.find(q=>q.quincena===label);
+  if(!period?.id) return;
+  const {data,error}=await supabaseClient.rpc('get_inventory_period_metrics',{p_period_id:period.id});
+  if(error){console.warn('No se pudieron refrescar las métricas backend:',error.message);return;}
+  period.metrics=Array.isArray(data)?data[0]:data;
 }
 
 function renderGauge(score){
@@ -1430,7 +1454,7 @@ function renderAll(){
   const data=currentData;
   document.getElementById('landingSection').style.display='none';
   document.getElementById('execOnlyHist').style.display='none';
-  renderGauge(calcHealth(data));
+  renderGauge(resolveHealthScore(data));
   renderKPIs(data);
   renderComparacion(data);
   renderAlertas(data);
@@ -1886,6 +1910,7 @@ async function guardarExplicacion(producto, semana){
   saveConciliaciones();
   try{
     await addExpToDatabase(realSemana, producto, exp);
+    await refreshPeriodMetrics(realSemana);
     showNotice('Explicación guardada en la base de datos.','ok');
   }catch(e){
     // Revertir la interfaz si la base de datos no confirmó el guardado.
@@ -1896,7 +1921,7 @@ async function guardarExplicacion(producto, semana){
     showNotice('No se guardó la explicación: '+e.message,'err');
   }
   if(currentData.length){
-    renderGauge(calcHealth(currentData));
+    renderGauge(resolveHealthScore(currentData));
     renderKPIs(currentData);
     renderTop5(currentData);
     renderAlertas(currentData);
@@ -1923,6 +1948,7 @@ async function borrarExplicacion(producto, semana, idx){
   saveConciliaciones();
   try{
     await delExpFromDatabase(semana, producto, removedExp);
+    await refreshPeriodMetrics(semana);
     showNotice('Explicación eliminada de la base de datos.','ok');
   }catch(e){
     // Restaurar en su posición si la base de datos no confirmó la eliminación.
@@ -1936,7 +1962,7 @@ async function borrarExplicacion(producto, semana, idx){
     showNotice('No se eliminó la explicación: '+e.message,'err');
   }
   if(currentData.length){
-    renderGauge(calcHealth(currentData));
+    renderGauge(resolveHealthScore(currentData));
     renderKPIs(currentData);
     renderTop5(currentData);
     renderAlertas(currentData);
