@@ -54,7 +54,7 @@ Deno.serve(async (req) => {
     request_key: key,
     block: "ORDER",
     status: "RUNNING",
-    trigger_type: "MANUAL",
+    trigger_type: key.startsWith("scheduled-") ? "SCHEDULED" : "MANUAL",
   }).select("id").single();
   if (ce || !run) return json({ ok: false, status: "RUN_CREATE_FAILED" }, 500);
   let processed = 0;

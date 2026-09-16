@@ -15,7 +15,7 @@ Deno.serve(async request => {
   const db=createClient(Deno.env.get('SUPABASE_URL')!,Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,{auth:{persistSession:false,autoRefreshToken:false}})
   const {data:old}=await db.from('tspoon_sync_runs').select('id,status,records_processed').eq('request_key',key).maybeSingle()
   if(old) return json({ok:old.status==='SUCCEEDED',duplicate:true,run:old})
-  const {data:run,error:createError}=await db.from('tspoon_sync_runs').insert({request_key:key,block:'PRODUCTION',status:'RUNNING',trigger_type:'MANUAL'}).select('id').single()
+  const {data:run,error:createError}=await db.from('tspoon_sync_runs').insert({request_key:key,block:'PRODUCTION',status:'RUNNING',trigger_type:key.startsWith('scheduled-')?'SCHEDULED':'MANUAL'}).select('id').single()
   if(createError||!run) return json({ok:false,status:'RUN_CREATE_FAILED'},500)
   let processed=0
   try{
