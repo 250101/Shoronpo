@@ -1407,8 +1407,9 @@ async function renderSystemStatus(){
   target.innerHTML='<div class="empty"><span class="spinner"></span> Consultando sincronizaciones…</div>';
   const fields='block,status,trigger_type,records_processed,started_at,finished_at,error_code';
   const blocks=['STOCK','PRODUCTION','ORDER'];
-  const [recentResponse,...blockResponses]=await Promise.all([
+  const [recentResponse,alertsResponse,...blockResponses]=await Promise.all([
     supabaseClient.from('tspoon_sync_runs').select(fields).order('started_at',{ascending:false}).limit(30),
+    supabaseClient.from('system_alerts').select('alert_type,block,severity,message,detected_at').eq('status','OPEN').order('detected_at',{ascending:false}),
     ...blocks.map(block=>supabaseClient.from('tspoon_sync_runs').select(fields).eq('block',block).order('started_at',{ascending:false}).limit(1).maybeSingle())
   ]);
   const {data:runs,error}=recentResponse;
@@ -1431,7 +1432,9 @@ async function renderSystemStatus(){
   }).join('');
   const connectorHtml=connector?`<div class="gestion-info"><strong>Conector tSpoonLab:</strong> ${escapeHtml(connector.status)} · última respuesta correcta ${formatMadridDate(connector.last_success_at)}${connector.last_error_code?` · error ${escapeHtml(connector.last_error_code)}`:''}</div>`:'';
   const failed=(runs||[]).filter(run=>run.status==='FAILED').slice(0,5);
-  target.innerHTML=`<div class="kpi-grid" style="margin-bottom:18px">${cards}</div>${connectorHtml}
+  const alerts=alertsResponse.data||[];
+  const alertsHtml=alerts.length?`<div class="gestion-info" style="border-color:var(--red-b);background:var(--red-bg)"><strong>🚨 ${alerts.length} incidente${alerts.length===1?'':'s'} activo${alerts.length===1?'':'s'}:</strong><ul style="margin:8px 0 0 18px">${alerts.map(alert=>`<li>${escapeHtml(alert.block||'CONECTOR')}: ${escapeHtml(alert.message)} <span style="color:var(--text3)">(${formatMadridDate(alert.detected_at)})</span></li>`).join('')}</ul></div>`:'<div class="gestion-info" style="border-color:#b6f0cf;background:#edfff4"><strong>✓ Sin incidentes activos.</strong> Las comprobaciones automáticas están funcionando.</div>';
+  target.innerHTML=`${alertsHtml}<div class="kpi-grid" style="margin:18px 0">${cards}</div>${connectorHtml}
     <div class="card-title" style="margin-top:20px">Últimas ejecuciones</div>
     <div class="tbl-wrap"><table class="atbl"><thead><tr><th>Bloque</th><th>Inicio</th><th>Estado</th><th>Registros</th><th>Origen</th></tr></thead><tbody>
     ${(runs||[]).slice(0,12).map(run=>`<tr><td>${escapeHtml(run.block)}</td><td>${formatMadridDate(run.started_at)}</td><td><span class="pill ${run.status==='SUCCEEDED'?'p-green':run.status==='FAILED'?'p-red':'p-amber'}">${escapeHtml(run.status)}</span></td><td>${run.records_processed||0}</td><td>${escapeHtml(run.trigger_type)}</td></tr>`).join('')||'<tr><td colspan="5">Sin ejecuciones registradas</td></tr>'}
