@@ -63,31 +63,46 @@ Deno.serve(async (req) => {
         Deno.env.get("TSPOONLAB_REMEMBERME") ?? "",
         { timezone: "Europe/Madrid" },
       ),
-      headers = await client.listOrders(start, 25);
-    for (let o = 0; o < headers.length; o += 5) {
-      const details = await Promise.all(
-        headers.slice(o, o + 5).map((x) => client.getOrder(String(x.id ?? ""))),
-      );
-      for (const detail of details) {
-        const order = mapOrder(detail, run.id),
-          deliveries = mapDeliveries(detail, run.id),
-          lines = deliveries.flatMap((delivery) => {
-            const rawDeliveryId = delivery.external_id.slice(
-              `${order.external_id}:`.length,
-            );
-            const source = (detail as { listComandes: unknown[] }).listComandes
-              .find((x) => (x as Record<string, unknown>).id === rawDeliveryId);
-            return mapOrderLines(source, run.id, order.external_id);
+      pageSize = 25;
+    let pageStart = start;
+    let hasMore = false;
+    do {
+      const headers = await client.listOrders(pageStart, pageSize);
+      for (let o = 0; o < headers.length; o += 5) {
+        const details = await Promise.all(
+          headers.slice(o, o + 5).map((x) =>
+            client.getOrder(String(x.id ?? ""))
+          ),
+        );
+        for (const detail of details) {
+          const order = mapOrder(detail, run.id),
+            deliveries = mapDeliveries(detail, run.id),
+            lines = deliveries.flatMap((delivery) => {
+              const rawDeliveryId = delivery.external_id.slice(
+                `${order.external_id}:`.length,
+              );
+              const source = (detail as { listComandes: unknown[] })
+                .listComandes
+                .find((x) =>
+                  (x as Record<string, unknown>).id === rawDeliveryId
+                );
+              return mapOrderLines(source, run.id, order.external_id);
+            });
+          const { error: replaceError } = await db.rpc("replace_tspoon_order", {
+            p_order: order,
+            p_deliveries: deliveries,
+            p_lines: lines,
           });
-        const { error: replaceError } = await db.rpc("replace_tspoon_order", {
-          p_order: order,
-          p_deliveries: deliveries,
-          p_lines: lines,
-        });
-        if (replaceError) throw new Error("ORDER_REPLACE_FAILED");
-        processed++;
+          if (replaceError) throw new Error("ORDER_REPLACE_FAILED");
+          processed++;
+        }
       }
-    }
+      hasMore = headers.length === pageSize;
+      pageStart += headers.length;
+      if (pageStart > 500) {
+        throw new TspoonlabError("Demasiados pedidos", "INVALID_RESPONSE");
+      }
+    } while (hasMore);
     await db.from("tspoon_sync_runs").update({
       status: "SUCCEEDED",
       records_processed: processed,
@@ -98,7 +113,7 @@ Deno.serve(async (req) => {
       runId: run.id,
       pageStart: start,
       ordersProcessed: processed,
-      hasMore: headers.length === 25,
+      hasMore: false,
     });
   } catch (error) {
     const raw = error instanceof TspoonlabError

@@ -9,7 +9,8 @@ Estado iniciado el 17-09-2026. El rediseño visual se realizará después de cer
 - Las RPC sólo pueden ejecutarse con `service_role`; `anon` y `authenticated` no tienen permiso.
 - Un error en cualquier fila revierte la cabecera y todos sus detalles.
 - Prueba de fallo forzado aprobada para ambos bloques: los datos anteriores permanecieron intactos.
-- Validación real posterior: producciones `200` (73 registros actuales) y pedidos `200` (25 registros en la primera página).
+- Validación real posterior: producciones `200` (73 registros actuales) y pedidos `200` (342 registros procesados).
+- La validación descubrió que pedidos tenía más de una página; ahora recorre todas las páginas (máximo defensivo: 500) antes de confirmar la corrida. La prueba completa devolvió `hasMore: false`.
 
 ## Próximos controles
 
