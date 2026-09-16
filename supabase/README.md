@@ -42,3 +42,9 @@ La cantidad total se calcula como `quantityInventory + quantityInput + quantityO
 ## Rollback del frontend
 
 El tag Git `pre-supabase-cutover-2026-09-15` conserva el frontend anterior en el commit `a52efc9`. Su Apps Script fue archivado después del corte y debe reactivarse explícitamente si alguna vez se utiliza ese rollback.
+
+## Operación y alertas
+
+Las sincronizaciones de stock, producciones y pedidos se ejecutan cada seis horas. El sistema detecta fallos, datos desactualizados y sesiones de tSpoonLab expiradas; los incidentes aparecen en el panel **Sistema** y se notifican por Telegram, incluyendo un único aviso de recuperación.
+
+El procedimiento diario, la renovación de sesión, el modo manual y las responsabilidades están documentados en `docs/OPERATIONS_RUNBOOK.md`. La recuperación de datos y los ensayos de backup se describen en `docs/DISASTER_RECOVERY.md`.
