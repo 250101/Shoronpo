@@ -21,3 +21,10 @@ Estado iniciado el 17-09-2026. El rediseño visual se realizará después de cer
 5. Automatizar backups cifrados y validar restauraciones.
 6. Retirar `localStorage` como estado paralelo de conciliaciones.
 7. Separar pruebas e incidentes reales en el panel operativo.
+
+## 2. Renderizado seguro del frontend — en curso
+
+- Los nombres de producto, familias, unidades, semanas y comentarios se escapan antes de insertarse como HTML.
+- Los identificadores enviados desde controles dinámicos se codifican y ya no se interpolan como JavaScript sin protección.
+- Se añadieron pruebas de regresión con cargas XSS para texto y atributos de acción.
+- Pendiente para cerrar este bloque: retirar los manejadores inline y mover CSS/JavaScript a archivos propios; eso permitirá eliminar `unsafe-inline` de la CSP.
