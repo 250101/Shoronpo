@@ -1405,9 +1405,13 @@ function escapeHtml(value){
 async function renderSystemStatus(){
   const target=document.getElementById('systemStatusContent');
   target.innerHTML='<div class="empty"><span class="spinner"></span> Consultando sincronizaciones…</div>';
-  const {data:runs,error}=await supabaseClient.from('tspoon_sync_runs')
-    .select('block,status,trigger_type,records_processed,started_at,finished_at,error_code')
-    .order('started_at',{ascending:false}).limit(30);
+  const fields='block,status,trigger_type,records_processed,started_at,finished_at,error_code';
+  const blocks=['STOCK','PRODUCTION','ORDER'];
+  const [recentResponse,...blockResponses]=await Promise.all([
+    supabaseClient.from('tspoon_sync_runs').select(fields).order('started_at',{ascending:false}).limit(30),
+    ...blocks.map(block=>supabaseClient.from('tspoon_sync_runs').select(fields).eq('block',block).order('started_at',{ascending:false}).limit(1).maybeSingle())
+  ]);
+  const {data:runs,error}=recentResponse;
   if(error){target.innerHTML=`<div class="empty" style="color:var(--red)">No se pudo consultar el estado: ${escapeHtml(error.message)}</div>`;return;}
   let connector=null;
   if(hasRole('ADMINISTRADOR')){
@@ -1415,9 +1419,7 @@ async function renderSystemStatus(){
       .select('status,last_checked_at,last_success_at,last_error_code').eq('singleton',true).maybeSingle();
     connector=response.data;
   }
-  const latest={};
-  (runs||[]).forEach(run=>{if(!latest[run.block]) latest[run.block]=run;});
-  const blocks=['STOCK','PRODUCTION','ORDER'];
+  const latest=Object.fromEntries(blocks.map((block,index)=>[block,blockResponses[index].data]));
   const cards=blocks.map(block=>{
     const run=latest[block];
     if(!run) return `<div class="kpi-card"><div class="kpi-label">${block}</div><div class="kpi-val" style="font-size:18px;color:var(--text3)">Sin datos</div></div>`;
