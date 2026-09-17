@@ -3,6 +3,8 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+const script = readFileSync(new URL("../app.js", import.meta.url), "utf8");
+const netlify = readFileSync(new URL("../netlify.toml", import.meta.url), "utf8");
 
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>'"]/g, (char) => ({
@@ -39,12 +41,19 @@ test("los campos de inventario y comentarios se renderizan escapados", () => {
     "${escapeHtml(d.familia)}",
     "${escapeHtml(p.producto)}",
     "${escapeHtml(e.comentario)}",
-  ]) assert.ok(html.includes(expression), `Falta protección: ${expression}`);
+  ]) assert.ok(script.includes(expression), `Falta protección: ${expression}`);
 });
 
-test("el script principal conserva sintaxis JavaScript válida", () => {
-  const scripts = [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)]
-    .map((match) => match[1]).filter((source) => source.trim());
-  assert.ok(scripts.length > 0);
-  for (const source of scripts) new Function(source);
+test("no quedan scripts ni eventos inline", () => {
+  assert.doesNotMatch(html, /<script(?:\s[^>]*)?>\s*[^<\s]/i);
+  assert.doesNotMatch(html, /\son(?:click|change|input)=/i);
+  assert.match(html, /<script src="app\.js" defer><\/script>/);
+  new Function(script);
+});
+
+test("la CSP bloquea scripts y atributos inline", () => {
+  const csp = netlify.match(/Content-Security-Policy = "([^"]+)"/)?.[1] ?? "";
+  assert.ok(csp);
+  assert.doesNotMatch(csp.match(/script-src[^;]*/)?.[0] ?? "", /unsafe-inline/);
+  assert.match(csp, /script-src-attr 'none'/);
 });
