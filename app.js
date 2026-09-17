@@ -1503,9 +1503,11 @@ function adminUserMessage(message,type=''){
 async function functionErrorCode(error,data){
   if(data?.error) return data.error;
   try{
-    if(error?.context instanceof Response){
-      const payload=await error.context.clone().json();
+    if(typeof error?.context?.json==='function'){
+      const payload=await error.context.json();
       if(payload?.error) return payload.error;
+      if(payload?.code) return payload.code;
+      if(payload?.message) return payload.message;
     }
   }catch{}
   return error?.message||'INVITE_FAILED';

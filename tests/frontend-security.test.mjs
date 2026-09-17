@@ -6,6 +6,7 @@ const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
 const script = readFileSync(new URL("../app.js", import.meta.url), "utf8");
 const netlify = readFileSync(new URL("../netlify.toml", import.meta.url), "utf8");
 const adminUsers = readFileSync(new URL("../supabase/functions/admin-users/index.ts", import.meta.url), "utf8");
+const supabaseConfig = readFileSync(new URL("../supabase/config.toml", import.meta.url), "utf8");
 
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>'"]/g, (char) => ({
@@ -95,7 +96,10 @@ test("la administración de usuarios sólo se muestra a administradores e invoca
   assert.match(html, /id="adminUserForm"/);
   assert.match(script, /adminUsersCard'\)\.hidden=!hasRole\('ADMINISTRADOR'\)/);
   assert.match(script, /functions\.invoke\('admin-users'/);
-  assert.match(script, /error\?\.context instanceof Response/);
+  assert.match(script, /typeof error\?\.context\?\.json==='function'/);
   assert.match(script, /EMAIL_RATE_LIMIT/);
   assert.match(adminUsers, /inviteCode\.includes\("rate_limit"\)/);
+  assert.match(supabaseConfig, /\[functions\.admin-users\]\s+verify_jwt = false/);
+  assert.match(adminUsers, /adminClient\.auth\.getUser/);
+  assert.match(adminUsers, /userClient\.rpc\(\s*"is_admin_aal2"/);
 });
