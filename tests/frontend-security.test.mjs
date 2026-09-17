@@ -61,7 +61,8 @@ test("la CSP bloquea scripts y atributos inline", () => {
 test("el administrador debe completar MFA antes de activar la sesión", () => {
   assert.match(script, /getAuthenticatorAssuranceLevel\(\)/);
   assert.match(script, /currentLevel==='aal2'/);
-  assert.match(script, /auth\.mfa\.enroll\(\{factorType:'totp'/);
+  assert.match(script, /auth\.mfa\.enroll\(\{/);
+  assert.match(script, /friendlyName:`Shoronpo admin \$\{Date\.now\(\)\}`/);
   assert.match(script, /auth\.mfa\.challengeAndVerify\(/);
   assert.match(script, /if\(!\(await requireAdminMfa\(access\)\)\) return false/);
 });

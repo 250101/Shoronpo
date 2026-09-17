@@ -1538,7 +1538,10 @@ async function requireAdminMfa(access){
     for(const staleFactor of (factors.totp||[]).filter(item=>item.status!=='verified')){
       await supabaseClient.auth.mfa.unenroll({factorId:staleFactor.id}).catch(()=>{});
     }
-    const {data:enrollment,error:enrollError}=await supabaseClient.auth.mfa.enroll({factorType:'totp',friendlyName:'Shoronpo administrador'});
+    const {data:enrollment,error:enrollError}=await supabaseClient.auth.mfa.enroll({
+      factorType:'totp',
+      friendlyName:`Shoronpo admin ${Date.now()}`
+    });
     if(enrollError) throw enrollError;
     factor=enrollment;
     setup.hidden=false;
