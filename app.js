@@ -1467,13 +1467,14 @@ function getImpactoConc(data){
 }
 
 // ── Autenticación Supabase (Fase 2) ───────────────────────────
+const INITIAL_AUTH_FLOW_TYPE=new URLSearchParams(location.hash.replace(/^#/,''))?.get('type')||'';
 const SUPABASE_URL='https://htuearldqvzqohoxwmdp.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY='sb_publishable_KZKbJob8_QwdWs3VUPVKgw_6IVK0LQV';
 const supabaseClient=window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY,{
   auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}
 });
 let authenticatedUser=null;
-let passwordRecoveryMode=false;
+let passwordRecoveryMode=INITIAL_AUTH_FLOW_TYPE==='invite'||INITIAL_AUTH_FLOW_TYPE==='recovery';
 let pendingMfaFactorId='';
 
 function hasRole(...roles){
@@ -1657,6 +1658,7 @@ async function loadAuthorization(user){
 
 async function activateSession(session){
   if(!session?.user){document.getElementById('authGate').classList.remove('hidden');return false;}
+  if(session.user.user_metadata?.must_set_password===true){showPasswordReset();return false;}
   const access=await loadAuthorization(session.user);
   if(!(await requireAdminMfa(access))) return false;
   authenticatedUser={...session.user,...access};
@@ -1694,7 +1696,7 @@ document.getElementById('passwordResetForm').addEventListener('submit',async eve
   if(password!==confirmation){passwordResetMessage('Las contraseñas no coinciden.');return;}
   const button=document.getElementById('passwordResetSubmit');button.disabled=true;button.textContent='Guardando…';
   try{
-    const {error}=await supabaseClient.auth.updateUser({password});
+    const {error}=await supabaseClient.auth.updateUser({password,data:{must_set_password:false}});
     if(error) throw error;
     passwordRecoveryMode=false;
     document.getElementById('newPassword').value='';
@@ -1727,7 +1729,7 @@ document.getElementById('mfaForm').addEventListener('submit',async event=>{
 });
 
 supabaseClient.auth.onAuthStateChange((event,session)=>{
-  if(event==='PASSWORD_RECOVERY') showPasswordReset();
+  if(event==='PASSWORD_RECOVERY'||INITIAL_AUTH_FLOW_TYPE==='invite'||session?.user?.user_metadata?.must_set_password===true) showPasswordReset();
   if(event==='SIGNED_OUT'&&!passwordRecoveryMode){
     showOnlyAuthForm('authForm');
   }
@@ -1770,6 +1772,7 @@ document.addEventListener('click',event=>{
   const week=control.dataset.week==='current'?(currentSemana||'actual'):decodeActionValue(control.dataset.week);
   if(action==='retry-connection') retryConnection();
   else if(action==='logout') logout();
+  else if(action==='show-password-reset') showPasswordReset();
   else if(action==='cancel-mfa') logout();
   else if(action==='show-view') showView(control.dataset.view,control);
   else if(action==='choose-file') document.getElementById('fileInput').click();

@@ -108,3 +108,11 @@ test("la administración de usuarios sólo se muestra a administradores e invoca
   assert.match(adminUsers, /userClient\.auth\s*\.getClaims\(token\)/);
   assert.match(adminUsers, /userClient\.rpc\(\s*"is_admin_aal2"/);
 });
+
+test("las invitaciones obligan a establecer contraseña antes de activar la aplicación", () => {
+  assert.match(adminUsers, /must_set_password: true/);
+  assert.match(script, /INITIAL_AUTH_FLOW_TYPE==='invite'/);
+  assert.match(script, /user_metadata\?\.must_set_password===true/);
+  assert.match(script, /updateUser\(\{password,data:\{must_set_password:false\}\}\)/);
+  assert.match(html, /data-action="show-password-reset"/);
+});
