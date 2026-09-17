@@ -39,6 +39,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .auth-field input{width:100%;padding:11px 12px;border:1px solid var(--border2);border-radius:8px;font:inherit}.auth-field input:focus{outline:2px solid var(--blue-l);border-color:var(--blue)}
 .auth-submit{width:100%;border:0;border-radius:8px;padding:11px;background:var(--blue);color:#fff;font-weight:700;cursor:pointer}.auth-submit:disabled{opacity:.55;cursor:wait}
 .auth-error{display:none;margin-top:12px;padding:9px 11px;border-radius:7px;background:var(--red-bg);color:var(--red-text);font-size:12px}
+.auth-secondary{width:100%;border:0;background:transparent;color:var(--text2);padding:10px;margin-top:4px;cursor:pointer}
+.mfa-setup{text-align:center;margin-bottom:16px}.mfa-setup img{display:block;width:210px;height:210px;margin:0 auto 10px;border:1px solid var(--border);border-radius:10px;padding:6px;background:#fff}
+.mfa-secret{font-size:11px;color:var(--text3)}.mfa-secret span{display:block}.mfa-secret code{display:block;margin-top:3px;color:var(--text2);font-size:12px;overflow-wrap:anywhere;user-select:all}
 
 /* Nav */
 .nav{background:var(--surface);border-bottom:1px solid var(--border);padding:0 24px;display:flex;gap:4px;position:sticky;top:60px;z-index:100;display:none}

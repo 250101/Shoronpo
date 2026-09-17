@@ -1474,6 +1474,8 @@ const supabaseClient=window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHA
 });
 let authenticatedUser=null;
 let passwordRecoveryMode=false;
+let pendingMfaFactorId='';
+let pendingMfaChallengeId='';
 
 function hasRole(...roles){
   return roles.some(role=>authenticatedUser?.roles?.includes(role));
@@ -1502,12 +1504,55 @@ function passwordResetMessage(message){
   el.textContent=message||'';el.style.display=message?'block':'none';
 }
 
+function mfaMessage(message){
+  const el=document.getElementById('mfaError');
+  el.textContent=message||'';el.style.display=message?'block':'none';
+}
+
+function showOnlyAuthForm(formId){
+  for(const id of ['authForm','passwordResetForm','mfaForm']) document.getElementById(id).hidden=id!==formId;
+  document.getElementById('authGate').classList.remove('hidden');
+}
+
 function showPasswordReset(){
   passwordRecoveryMode=true;
-  document.getElementById('authGate').classList.remove('hidden');
-  document.getElementById('authForm').hidden=true;
-  document.getElementById('passwordResetForm').hidden=false;
+  showOnlyAuthForm('passwordResetForm');
   passwordResetMessage('');
+}
+
+async function requireAdminMfa(access){
+  if(!access.roles.includes('ADMINISTRADOR')) return true;
+  const {data:assurance,error:assuranceError}=await supabaseClient.auth.mfa.getAuthenticatorAssuranceLevel();
+  if(assuranceError) throw assuranceError;
+  if(assurance.currentLevel==='aal2') return true;
+
+  let factor;
+  const {data:factors,error:factorsError}=await supabaseClient.auth.mfa.listFactors();
+  if(factorsError) throw factorsError;
+  factor=(factors.totp||[]).find(item=>item.status==='verified');
+  const setup=document.getElementById('mfaSetup');
+  if(factor){
+    setup.hidden=true;
+    document.getElementById('mfaTitle').textContent='Verificar identidad';
+    document.getElementById('mfaDescription').textContent='Ingresá el código actual de Microsoft Authenticator para continuar como administrador.';
+  }else{
+    const {data:enrollment,error:enrollError}=await supabaseClient.auth.mfa.enroll({factorType:'totp',friendlyName:'Shoronpo administrador'});
+    if(enrollError) throw enrollError;
+    factor=enrollment;
+    setup.hidden=false;
+    document.getElementById('mfaTitle').textContent='Proteger cuenta administradora';
+    document.getElementById('mfaDescription').textContent='Escaneá el código con Microsoft Authenticator y escribí el código de seis dígitos.';
+    document.getElementById('mfaQr').src=enrollment.totp.qr_code;
+    document.getElementById('mfaSecret').textContent=enrollment.totp.secret;
+  }
+  const {data:challenge,error:challengeError}=await supabaseClient.auth.mfa.challenge({factorId:factor.id});
+  if(challengeError) throw challengeError;
+  pendingMfaFactorId=factor.id;
+  pendingMfaChallengeId=challenge.id;
+  document.getElementById('mfaCode').value='';
+  mfaMessage('');
+  showOnlyAuthForm('mfaForm');
+  return false;
 }
 
 async function loadAuthorization(user){
@@ -1526,6 +1571,7 @@ async function loadAuthorization(user){
 async function activateSession(session){
   if(!session?.user){document.getElementById('authGate').classList.remove('hidden');return false;}
   const access=await loadAuthorization(session.user);
+  if(!(await requireAdminMfa(access))) return false;
   authenticatedUser={...session.user,...access};
   document.getElementById('authIdentity').textContent=access.profile.display_name||session.user.email;
   document.getElementById('authRole').textContent=access.roles.join(' · ');
@@ -1576,11 +1622,27 @@ document.getElementById('passwordResetForm').addEventListener('submit',async eve
   finally{button.disabled=false;button.textContent='Guardar contraseña';}
 });
 
+document.getElementById('mfaForm').addEventListener('submit',async event=>{
+  event.preventDefault();mfaMessage('');
+  const code=document.getElementById('mfaCode').value.trim();
+  if(!/^\d{6}$/.test(code)){mfaMessage('Ingresá el código de seis dígitos.');return;}
+  const button=document.getElementById('mfaSubmit');button.disabled=true;button.textContent='Verificando…';
+  try{
+    const {error}=await supabaseClient.auth.mfa.verify({factorId:pendingMfaFactorId,challengeId:pendingMfaChallengeId,code});
+    if(error) throw error;
+    pendingMfaFactorId='';pendingMfaChallengeId='';
+    const {data:{session}}=await supabaseClient.auth.getSession();
+    if(!session) throw new Error('La sesión expiró. Iniciá sesión nuevamente.');
+    await activateSession(session);
+  }catch(error){
+    mfaMessage(error?.message||'El código no pudo verificarse.');
+  }finally{button.disabled=false;button.textContent='Verificar y continuar';}
+});
+
 supabaseClient.auth.onAuthStateChange((event,session)=>{
   if(event==='PASSWORD_RECOVERY') showPasswordReset();
   if(event==='SIGNED_OUT'&&!passwordRecoveryMode){
-    document.getElementById('passwordResetForm').hidden=true;
-    document.getElementById('authForm').hidden=false;
+    showOnlyAuthForm('authForm');
   }
 });
 
@@ -1621,6 +1683,7 @@ document.addEventListener('click',event=>{
   const week=control.dataset.week==='current'?(currentSemana||'actual'):decodeActionValue(control.dataset.week);
   if(action==='retry-connection') retryConnection();
   else if(action==='logout') logout();
+  else if(action==='cancel-mfa') logout();
   else if(action==='show-view') showView(control.dataset.view,control);
   else if(action==='choose-file') document.getElementById('fileInput').click();
   else if(action==='history-scroll') histScroll(Number(control.dataset.direction));

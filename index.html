@@ -29,6 +29,18 @@
     <button class="auth-submit" id="passwordResetSubmit" type="submit">Guardar contraseña</button>
     <div class="auth-error" id="passwordResetError" role="alert"></div>
   </form>
+  <form class="auth-card" id="mfaForm" hidden>
+    <h1 id="mfaTitle">Proteger cuenta administradora</h1>
+    <p id="mfaDescription">Escaneá el código con Microsoft Authenticator y escribí el código de seis dígitos.</p>
+    <div class="mfa-setup" id="mfaSetup">
+      <img id="mfaQr" alt="Código QR para configurar Microsoft Authenticator">
+      <div class="mfa-secret"><span>Clave manual</span><code id="mfaSecret"></code></div>
+    </div>
+    <label class="auth-field"><span>Código de Microsoft Authenticator</span><input id="mfaCode" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required></label>
+    <button class="auth-submit" id="mfaSubmit" type="submit">Verificar y continuar</button>
+    <button class="auth-secondary" data-action="cancel-mfa" type="button">Cancelar y salir</button>
+    <div class="auth-error" id="mfaError" role="alert"></div>
+  </form>
 </div>
 
 <!-- Loading overlay -->

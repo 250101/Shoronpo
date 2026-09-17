@@ -37,3 +37,4 @@ Estado iniciado el 17-09-2026. El rediseño visual se realizará después de cer
 - La función `admin-users` invita usuarios sin exponer `service_role` al navegador, valida origen, JWT, rol ADMINISTRADOR y MFA.
 - Las invitaciones sólo admiten los roles cerrados `ADMINISTRADOR`, `DIRECCION` y `OBRADOR`.
 - Antes de aplicar este bloque hay que completar el enrolamiento TOTP del administrador y configurar SMTP/URLs de invitación; activarlo antes podría bloquear la administración de accesos.
+- El frontend ya incluye enrolamiento y desafío TOTP para administradores; la primera sesión mostrará un QR y exigirá un código válido antes de abrir el sistema.
