@@ -1475,7 +1475,6 @@ const supabaseClient=window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHA
 let authenticatedUser=null;
 let passwordRecoveryMode=false;
 let pendingMfaFactorId='';
-let pendingMfaChallengeId='';
 
 function hasRole(...roles){
   return roles.some(role=>authenticatedUser?.roles?.includes(role));
@@ -1536,6 +1535,9 @@ async function requireAdminMfa(access){
     document.getElementById('mfaTitle').textContent='Verificar identidad';
     document.getElementById('mfaDescription').textContent='Ingresá el código actual de Microsoft Authenticator para continuar como administrador.';
   }else{
+    for(const staleFactor of (factors.totp||[]).filter(item=>item.status!=='verified')){
+      await supabaseClient.auth.mfa.unenroll({factorId:staleFactor.id}).catch(()=>{});
+    }
     const {data:enrollment,error:enrollError}=await supabaseClient.auth.mfa.enroll({factorType:'totp',friendlyName:'Shoronpo administrador'});
     if(enrollError) throw enrollError;
     factor=enrollment;
@@ -1545,10 +1547,7 @@ async function requireAdminMfa(access){
     document.getElementById('mfaQr').src=enrollment.totp.qr_code;
     document.getElementById('mfaSecret').textContent=enrollment.totp.secret;
   }
-  const {data:challenge,error:challengeError}=await supabaseClient.auth.mfa.challenge({factorId:factor.id});
-  if(challengeError) throw challengeError;
   pendingMfaFactorId=factor.id;
-  pendingMfaChallengeId=challenge.id;
   document.getElementById('mfaCode').value='';
   mfaMessage('');
   showOnlyAuthForm('mfaForm');
@@ -1628,9 +1627,9 @@ document.getElementById('mfaForm').addEventListener('submit',async event=>{
   if(!/^\d{6}$/.test(code)){mfaMessage('Ingresá el código de seis dígitos.');return;}
   const button=document.getElementById('mfaSubmit');button.disabled=true;button.textContent='Verificando…';
   try{
-    const {error}=await supabaseClient.auth.mfa.verify({factorId:pendingMfaFactorId,challengeId:pendingMfaChallengeId,code});
+    const {error}=await supabaseClient.auth.mfa.challengeAndVerify({factorId:pendingMfaFactorId,code});
     if(error) throw error;
-    pendingMfaFactorId='';pendingMfaChallengeId='';
+    pendingMfaFactorId='';
     const {data:{session}}=await supabaseClient.auth.getSession();
     if(!session) throw new Error('La sesión expiró. Iniciá sesión nuevamente.');
     await activateSession(session);
