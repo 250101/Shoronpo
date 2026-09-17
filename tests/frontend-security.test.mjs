@@ -115,4 +115,6 @@ test("las invitaciones obligan a establecer contraseña antes de activar la apli
   assert.match(script, /user_metadata\?\.must_set_password===true/);
   assert.match(script, /updateUser\(\{password,data:\{must_set_password:false\}\}\)/);
   assert.match(html, /data-action="show-password-reset"/);
+  assert.match(html, /data-action="request-password-reset"/);
+  assert.match(script, /resetPasswordForEmail\(email,\{redirectTo:`\$\{location\.origin\}\//);
 });

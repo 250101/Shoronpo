@@ -1577,6 +1577,15 @@ function showPasswordReset(){
   passwordResetMessage('');
 }
 
+async function requestPasswordReset(){
+  const email=document.getElementById('authEmail').value.trim().toLowerCase();
+  if(!email){authMessage('Ingresá primero el email de la cuenta.');return;}
+  authMessage('Enviando enlace seguro…');
+  const {error}=await supabaseClient.auth.resetPasswordForEmail(email,{redirectTo:`${location.origin}/`});
+  if(error){authMessage('No se pudo enviar el enlace. Esperá unos minutos y reintentá.');return;}
+  authMessage('Te enviamos un enlace para establecer la contraseña. Revisá también spam.');
+}
+
 async function requireAdminMfa(access){
   if(!access.roles.includes('ADMINISTRADOR')) return true;
   const {data:assurance,error:assuranceError}=await supabaseClient.auth.mfa.getAuthenticatorAssuranceLevel();
@@ -1773,6 +1782,7 @@ document.addEventListener('click',event=>{
   if(action==='retry-connection') retryConnection();
   else if(action==='logout') logout();
   else if(action==='show-password-reset') showPasswordReset();
+  else if(action==='request-password-reset') requestPasswordReset();
   else if(action==='cancel-mfa') logout();
   else if(action==='show-view') showView(control.dataset.view,control);
   else if(action==='choose-file') document.getElementById('fileInput').click();
