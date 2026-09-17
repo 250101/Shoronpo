@@ -1527,11 +1527,16 @@ async function inviteAdminUser(event){
       adminUserMessage('Verificá Microsoft Authenticator y luego volvé a enviar la invitación.','err');
       return;
     }
-    const {data,error}=await supabaseClient.functions.invoke('admin-users',{body:{
-      displayName:document.getElementById('adminUserName').value.trim(),
-      email:document.getElementById('adminUserEmail').value.trim().toLowerCase(),
-      role:document.getElementById('adminUserRole').value
-    }});
+    const {data:sessionData,error:sessionError}=await supabaseClient.auth.getSession();
+    if(sessionError||!sessionData.session) throw new Error('SESSION_EXPIRED');
+    const {data,error}=await supabaseClient.functions.invoke('admin-users',{
+      headers:{Authorization:`Bearer ${sessionData.session.access_token}`},
+      body:{
+        displayName:document.getElementById('adminUserName').value.trim(),
+        email:document.getElementById('adminUserEmail').value.trim().toLowerCase(),
+        role:document.getElementById('adminUserRole').value
+      }
+    });
     if(error){
       const code=await functionErrorCode(error,data);
       throw new Error(code);
@@ -1542,6 +1547,7 @@ async function inviteAdminUser(event){
   }catch(error){
     const messages={
       MFA_ADMIN_REQUIRED:'Volvé a verificar Microsoft Authenticator para administrar usuarios.',
+      SESSION_EXPIRED:'La sesión venció. Volvé a ingresar antes de crear usuarios.',
       INVALID_INPUT:'Revisá el nombre, el email y el rol.',
       EMAIL_RATE_LIMIT:'Supabase alcanzó temporalmente el límite de correos. Configuraremos SMTP propio antes de operar invitaciones.',
       EMAIL_ALREADY_EXISTS:'Ese email ya tiene una cuenta. Podés asignarle el rol desde la gestión de usuarios existentes.',
