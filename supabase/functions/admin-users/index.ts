@@ -1,10 +1,26 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-const allowedRoles = new Set(["ADMINISTRADOR", "DIRECCION", "OBRADOR"]);
+const allowedRoles = new Set([
+  "ADMINISTRADOR",
+  "DIRECCION",
+  "OBRADOR",
+  "RESTAURANTE",
+]);
 const allowedOrigin = Deno.env.get("ADMIN_APP_ORIGIN") ?? "";
 const inviteRedirect = Deno.env.get("ADMIN_INVITE_REDIRECT_URL") ?? "";
 
 function response(body: unknown, status = 200, origin = "") {
+  if (status === 204) {
+    return new Response(null, {
+      status,
+      headers: {
+        "access-control-allow-origin": origin,
+        "access-control-allow-headers": "authorization, apikey, content-type",
+        "access-control-allow-methods": "POST, OPTIONS",
+        "vary": "Origin",
+      },
+    });
+  }
   return Response.json(body, {
     status,
     headers: {

@@ -5,6 +5,7 @@ import test from "node:test";
 const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
 const script = readFileSync(new URL("../app.js", import.meta.url), "utf8");
 const netlify = readFileSync(new URL("../netlify.toml", import.meta.url), "utf8");
+const adminUsers = readFileSync(new URL("../supabase/functions/admin-users/index.ts", import.meta.url), "utf8");
 
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>'"]/g, (char) => ({
@@ -79,4 +80,19 @@ test("un fallo transitorio de permisos conserva la sesión para poder reintentar
   const guardedSignOuts=script.match(/if\(error\?\.name!=='AuthorizationLoadError'\) await supabaseClient\.auth\.signOut\(\)\.catch\(\(\)=>\{\}\);/g)||[];
   assert.equal(guardedSignOuts.length,2);
   assert.match(script, /roles!inner\(code\)/);
+});
+
+test("la función administrativa responde al preflight sin cuerpo y admite todos los roles", () => {
+  assert.match(adminUsers, /status === 204/);
+  assert.match(adminUsers, /new Response\(null/);
+  for (const role of ["ADMINISTRADOR", "DIRECCION", "OBRADOR", "RESTAURANTE"]) {
+    assert.ok(adminUsers.includes(`"${role}"`), `Falta el rol ${role}`);
+  }
+});
+
+test("la administración de usuarios sólo se muestra a administradores e invoca el backend", () => {
+  assert.match(html, /id="adminUsersCard" hidden/);
+  assert.match(html, /id="adminUserForm"/);
+  assert.match(script, /adminUsersCard'\)\.hidden=!hasRole\('ADMINISTRADOR'\)/);
+  assert.match(script, /functions\.invoke\('admin-users'/);
 });

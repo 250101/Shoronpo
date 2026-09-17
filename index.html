@@ -341,6 +341,28 @@
       </div>
       <div id="systemStatusContent"><div class="empty">Consultá el estado de las sincronizaciones.</div></div>
     </div>
+    <div class="card card-full admin-users-card" id="adminUsersCard" hidden>
+      <div class="card-title">Administración de usuarios</div>
+      <p class="admin-users-help">Invitá una cuenta y asignale su rol inicial. La persona recibirá un correo para establecer su contraseña.</p>
+      <form id="adminUserForm" class="admin-user-form">
+        <label>Nombre
+          <input id="adminUserName" name="displayName" type="text" minlength="2" maxlength="120" autocomplete="name" required>
+        </label>
+        <label>Email
+          <input id="adminUserEmail" name="email" type="email" autocomplete="email" required>
+        </label>
+        <label>Rol
+          <select id="adminUserRole" name="role" required>
+            <option value="OBRADOR">Obrador</option>
+            <option value="RESTAURANTE">Restaurante</option>
+            <option value="DIRECCION">Dirección</option>
+            <option value="ADMINISTRADOR">Administrador</option>
+          </select>
+        </label>
+        <button id="adminUserSubmit" type="submit">Enviar invitación</button>
+      </form>
+      <div class="admin-user-message" id="adminUserMessage" role="status"></div>
+    </div>
   </div>
 
 <!-- Panel lateral -->

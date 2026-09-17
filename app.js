@@ -1490,7 +1490,42 @@ function applyRoleUi(){
   document.querySelectorAll('#mainNav .nav-tab').forEach(el=>el.style.display=mayView?'':'none');
   document.getElementById('roleDenied').style.display=mayView?'none':'block';
   document.getElementById('landingSection').style.display=mayView?'':'none';
+  document.getElementById('adminUsersCard').hidden=!hasRole('ADMINISTRADOR');
   if(!mayView) document.getElementById('mainNav').style.display='none';
+}
+
+function adminUserMessage(message,type=''){
+  const element=document.getElementById('adminUserMessage');
+  element.textContent=message;
+  element.className=`admin-user-message ${type}`.trim();
+}
+
+async function inviteAdminUser(event){
+  event.preventDefault();
+  adminUserMessage('');
+  if(!hasRole('ADMINISTRADOR')){adminUserMessage('No tenés permisos para administrar usuarios.','err');return;}
+  const button=document.getElementById('adminUserSubmit');
+  button.disabled=true;button.textContent='Enviando…';
+  try{
+    const {data,error}=await supabaseClient.functions.invoke('admin-users',{body:{
+      displayName:document.getElementById('adminUserName').value.trim(),
+      email:document.getElementById('adminUserEmail').value.trim().toLowerCase(),
+      role:document.getElementById('adminUserRole').value
+    }});
+    if(error) throw error;
+    if(!data?.ok) throw new Error(data?.error||'INVITE_FAILED');
+    event.currentTarget.reset();
+    adminUserMessage('Invitación enviada y rol asignado correctamente.','ok');
+  }catch(error){
+    const messages={
+      MFA_ADMIN_REQUIRED:'Volvé a verificar Microsoft Authenticator para administrar usuarios.',
+      INVALID_INPUT:'Revisá el nombre, el email y el rol.',
+      INVITE_FAILED:'No se pudo enviar la invitación. Verificá si el email ya existe.',
+      INVITED_WITHOUT_ROLE:'La invitación fue enviada, pero el rol no pudo asignarse. Revisalo en Supabase.'
+    };
+    adminUserMessage(messages[error?.message]||'No se pudo crear el usuario. Reintentá en unos segundos.','err');
+    console.error('Admin user invitation failed',{message:error?.message});
+  }finally{button.disabled=false;button.textContent='Enviar invitación';}
 }
 
 function authMessage(message){
@@ -1735,5 +1770,6 @@ document.addEventListener('click',event=>{
 document.getElementById('semanaSelector').addEventListener('change',event=>cambiarSemanaVista(event.target.value));
 document.getElementById('detailSearch').addEventListener('input',event=>searchDetail(event.target.value));
 document.getElementById('productSearch').addEventListener('input',event=>searchProductos(event.target.value));
+document.getElementById('adminUserForm').addEventListener('submit',inviteAdminUser);
 
 initializeApp();
