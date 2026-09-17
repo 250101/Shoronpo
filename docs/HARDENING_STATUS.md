@@ -16,7 +16,7 @@ Estado iniciado el 17-09-2026. El rediseño visual se realizará después de cer
 
 1. Neutralizar contenido HTML no confiable y eliminar eventos inline. **Completado.**
 2. Dividir el frontend monolítico y retirar `unsafe-inline` de scripts en la CSP. **Completado.**
-3. Incorporar administración segura de usuarios y roles con MFA y SMTP propio.
+3. Incorporar administración segura de usuarios y roles con MFA y SMTP propio. **MFA y administración completados; SMTP propio pendiente.**
 4. Separar staging y producción, incluidos base, secretos, cron y URL.
 5. Automatizar backups cifrados y validar restauraciones.
 6. Retirar `localStorage` como estado paralelo de conciliaciones.
@@ -31,10 +31,12 @@ Estado iniciado el 17-09-2026. El rediseño visual se realizará después de cer
 - El CSS y JavaScript se separaron en `styles.css` y `app.js`; la CSP ya bloquea scripts y atributos de script inline.
 - `style-src` conserva temporalmente `unsafe-inline` sólo para estilos visuales heredados en atributos; no habilita ejecución de JavaScript.
 
-## 3. Usuarios, roles y MFA — preparado, pendiente de activación
+## 3. Usuarios, roles y MFA — activo
 
-- La migración `0026` exige una sesión `aal2` para asignar/revocar roles y activar/desactivar usuarios.
-- La función `admin-users` invita usuarios sin exponer `service_role` al navegador, valida origen, JWT, rol ADMINISTRADOR y MFA.
-- Las invitaciones sólo admiten los roles cerrados `ADMINISTRADOR`, `DIRECCION` y `OBRADOR`.
-- Antes de aplicar este bloque hay que completar el enrolamiento TOTP del administrador y configurar SMTP/URLs de invitación; activarlo antes podría bloquear la administración de accesos.
-- El frontend ya incluye enrolamiento y desafío TOTP para administradores; la primera sesión mostrará un QR y exigirá un código válido antes de abrir el sistema.
+- La migración `0026` está aplicada y exige una sesión `aal2` para asignar/revocar roles y activar/desactivar usuarios.
+- La prueba directa confirmó `aal1 = false` y `aal2 = true` para la cuenta administradora.
+- La función `admin-users` está desplegada sin exponer `service_role` al navegador; valida origen, JWT, rol ADMINISTRADOR y MFA.
+- Las invitaciones admiten los roles cerrados `ADMINISTRADOR`, `DIRECCION`, `OBRADOR` y `RESTAURANTE`.
+- El preflight CORS fue corregido y probado (`204`); origen no permitido devuelve `403` y ausencia de sesión devuelve `401`.
+- El frontend incluye enrolamiento/desafío TOTP y una ficha exclusiva para administradores que permite invitar usuarios y asignar su rol inicial.
+- Pendiente antes de considerar cerrado todo el bloque: validar una invitación real de punta a punta y configurar SMTP propio para evitar depender de los límites del correo integrado de Supabase.
