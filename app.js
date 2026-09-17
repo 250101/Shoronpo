@@ -1520,6 +1520,13 @@ async function inviteAdminUser(event){
   const button=document.getElementById('adminUserSubmit');
   button.disabled=true;button.textContent='Enviando…';
   try{
+    const {data:assurance,error:assuranceError}=await supabaseClient.auth.mfa.getAuthenticatorAssuranceLevel();
+    if(assuranceError) throw assuranceError;
+    if(assurance.currentLevel!=='aal2'){
+      await requireAdminMfa({roles:authenticatedUser.roles});
+      adminUserMessage('Verificá Microsoft Authenticator y luego volvé a enviar la invitación.','err');
+      return;
+    }
     const {data,error}=await supabaseClient.functions.invoke('admin-users',{body:{
       displayName:document.getElementById('adminUserName').value.trim(),
       email:document.getElementById('adminUserEmail').value.trim().toLowerCase(),
