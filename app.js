@@ -1557,13 +1557,41 @@ async function requireAdminMfa(access){
   return false;
 }
 
+const AUTHORIZATION_RETRY_DELAYS_MS=[0,350,900];
+
+function isTransientAuthorizationError(error){
+  const status=Number(error?.status||0);
+  const message=String(error?.message||'').toLowerCase();
+  return !status||status===408||status===429||status>=500||message.includes('fetch')||message.includes('network')||message.includes('timeout');
+}
+
+async function authorizationQuery(label,queryFactory){
+  let lastError=null;
+  for(let attempt=0;attempt<AUTHORIZATION_RETRY_DELAYS_MS.length;attempt++){
+    const delay=AUTHORIZATION_RETRY_DELAYS_MS[attempt];
+    if(delay) await new Promise(resolve=>setTimeout(resolve,delay));
+    const result=await queryFactory();
+    if(!result.error) return result.data;
+    lastError=result.error;
+    if(!isTransientAuthorizationError(lastError)) break;
+  }
+  console.error(`Authorization query failed: ${label}`,{
+    code:lastError?.code,
+    status:lastError?.status,
+    message:lastError?.message
+  });
+  const error=new Error('No pudimos cargar tus permisos. Reintentá en unos segundos.');
+  error.name='AuthorizationLoadError';
+  error.cause=lastError;
+  throw error;
+}
+
 async function loadAuthorization(user){
-  const [{data:profile,error:profileError},{data:roleRows,error:roleError},{data:locationRows,error:locationError}]=await Promise.all([
-    supabaseClient.from('profiles').select('display_name,is_active').eq('user_id',user.id).single(),
-    supabaseClient.from('user_roles').select('roles(code)').eq('user_id',user.id),
-    supabaseClient.from('locations').select('id,code,name,type,is_active').order('code')
+  const [profile,roleRows,locationRows]=await Promise.all([
+    authorizationQuery('profile',()=>supabaseClient.from('profiles').select('display_name,is_active').eq('user_id',user.id).single()),
+    authorizationQuery('roles',()=>supabaseClient.from('user_roles').select('roles!inner(code)').eq('user_id',user.id)),
+    authorizationQuery('locations',()=>supabaseClient.from('locations').select('id,code,name,type,is_active').order('code'))
   ]);
-  if(profileError||roleError||locationError) throw new Error('No se pudieron validar tus permisos.');
   if(!profile?.is_active) throw new Error('Tu usuario está desactivado.');
   const roles=(roleRows||[]).map(row=>row.roles?.code).filter(Boolean);
   if(!roles.length) throw new Error('Tu usuario no tiene un rol asignado.');
@@ -1596,7 +1624,7 @@ document.getElementById('authForm').addEventListener('submit',async event=>{
     await activateSession(data.session);
     document.getElementById('authPassword').value='';
   }catch(error){
-    await supabaseClient.auth.signOut().catch(()=>{});
+    if(error?.name!=='AuthorizationLoadError') await supabaseClient.auth.signOut().catch(()=>{});
     authMessage(error?.message==='Invalid login credentials'?'Email o contraseña incorrectos.':(error?.message||'No se pudo iniciar sesión.'));
   }finally{button.disabled=false;button.textContent='Ingresar';}
 });
@@ -1667,7 +1695,7 @@ async function initializeApp(){
     const {data:{session}}=await supabaseClient.auth.getSession();
     if(session&&!passwordRecoveryMode) await activateSession(session);
   }catch(error){
-    await supabaseClient.auth.signOut().catch(()=>{});
+    if(error?.name!=='AuthorizationLoadError') await supabaseClient.auth.signOut().catch(()=>{});
     authMessage(error?.message||'No se pudo validar la sesión.');
   }
 }

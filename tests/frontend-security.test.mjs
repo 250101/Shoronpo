@@ -66,3 +66,17 @@ test("el administrador debe completar MFA antes de activar la sesión", () => {
   assert.match(script, /auth\.mfa\.challengeAndVerify\(/);
   assert.match(script, /if\(!\(await requireAdminMfa\(access\)\)\) return false/);
 });
+
+test("las consultas de autorización reintentan fallos transitorios", () => {
+  assert.match(script, /AUTHORIZATION_RETRY_DELAYS_MS=\[0,350,900\]/);
+  assert.match(script, /isTransientAuthorizationError\(lastError\)/);
+  assert.match(script, /authorizationQuery\('profile'/);
+  assert.match(script, /authorizationQuery\('roles'/);
+  assert.match(script, /authorizationQuery\('locations'/);
+});
+
+test("un fallo transitorio de permisos conserva la sesión para poder reintentar", () => {
+  const guardedSignOuts=script.match(/if\(error\?\.name!=='AuthorizationLoadError'\) await supabaseClient\.auth\.signOut\(\)\.catch\(\(\)=>\{\}\);/g)||[];
+  assert.equal(guardedSignOuts.length,2);
+  assert.match(script, /roles!inner\(code\)/);
+});
