@@ -95,4 +95,7 @@ test("la administración de usuarios sólo se muestra a administradores e invoca
   assert.match(html, /id="adminUserForm"/);
   assert.match(script, /adminUsersCard'\)\.hidden=!hasRole\('ADMINISTRADOR'\)/);
   assert.match(script, /functions\.invoke\('admin-users'/);
+  assert.match(script, /error\?\.context instanceof Response/);
+  assert.match(script, /EMAIL_RATE_LIMIT/);
+  assert.match(adminUsers, /inviteCode\.includes\("rate_limit"\)/);
 });

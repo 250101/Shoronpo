@@ -1500,6 +1500,17 @@ function adminUserMessage(message,type=''){
   element.className=`admin-user-message ${type}`.trim();
 }
 
+async function functionErrorCode(error,data){
+  if(data?.error) return data.error;
+  try{
+    if(error?.context instanceof Response){
+      const payload=await error.context.clone().json();
+      if(payload?.error) return payload.error;
+    }
+  }catch{}
+  return error?.message||'INVITE_FAILED';
+}
+
 async function inviteAdminUser(event){
   event.preventDefault();
   adminUserMessage('');
@@ -1512,7 +1523,10 @@ async function inviteAdminUser(event){
       email:document.getElementById('adminUserEmail').value.trim().toLowerCase(),
       role:document.getElementById('adminUserRole').value
     }});
-    if(error) throw error;
+    if(error){
+      const code=await functionErrorCode(error,data);
+      throw new Error(code);
+    }
     if(!data?.ok) throw new Error(data?.error||'INVITE_FAILED');
     event.currentTarget.reset();
     adminUserMessage('Invitación enviada y rol asignado correctamente.','ok');
@@ -1520,6 +1534,8 @@ async function inviteAdminUser(event){
     const messages={
       MFA_ADMIN_REQUIRED:'Volvé a verificar Microsoft Authenticator para administrar usuarios.',
       INVALID_INPUT:'Revisá el nombre, el email y el rol.',
+      EMAIL_RATE_LIMIT:'Supabase alcanzó temporalmente el límite de correos. Configuraremos SMTP propio antes de operar invitaciones.',
+      EMAIL_ALREADY_EXISTS:'Ese email ya tiene una cuenta. Podés asignarle el rol desde la gestión de usuarios existentes.',
       INVITE_FAILED:'No se pudo enviar la invitación. Verificá si el email ya existe.',
       INVITED_WITHOUT_ROLE:'La invitación fue enviada, pero el rol no pudo asignarse. Revisalo en Supabase.'
     };

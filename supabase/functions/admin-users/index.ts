@@ -99,6 +99,13 @@ Deno.serve(async (request) => {
     });
   if (inviteError || !invitation.user) {
     console.error("ADMIN_INVITE_FAILED", inviteError?.code ?? "unknown");
+    const inviteCode = inviteError?.code ?? "";
+    if (inviteCode.includes("rate_limit")) {
+      return response({ error: "EMAIL_RATE_LIMIT" }, 429, origin);
+    }
+    if (inviteCode === "email_exists" || inviteCode === "user_already_exists") {
+      return response({ error: "EMAIL_ALREADY_EXISTS" }, 409, origin);
+    }
     return response({ error: "INVITE_FAILED" }, 502, origin);
   }
   const { error: roleError } = await userClient.rpc("grant_role", {
