@@ -30,3 +30,10 @@ Estado iniciado el 17-09-2026. El rediseño visual se realizará después de cer
 - Los manejadores inline fueron reemplazados por delegación de eventos con `data-action`.
 - El CSS y JavaScript se separaron en `styles.css` y `app.js`; la CSP ya bloquea scripts y atributos de script inline.
 - `style-src` conserva temporalmente `unsafe-inline` sólo para estilos visuales heredados en atributos; no habilita ejecución de JavaScript.
+
+## 3. Usuarios, roles y MFA — preparado, pendiente de activación
+
+- La migración `0026` exige una sesión `aal2` para asignar/revocar roles y activar/desactivar usuarios.
+- La función `admin-users` invita usuarios sin exponer `service_role` al navegador, valida origen, JWT, rol ADMINISTRADOR y MFA.
+- Las invitaciones sólo admiten los roles cerrados `ADMINISTRADOR`, `DIRECCION` y `OBRADOR`.
+- Antes de aplicar este bloque hay que completar el enrolamiento TOTP del administrador y configurar SMTP/URLs de invitación; activarlo antes podría bloquear la administración de accesos.
