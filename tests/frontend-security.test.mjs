@@ -95,10 +95,10 @@ test("la administración de usuarios sólo se muestra a administradores e invoca
   assert.match(html, /id="adminUsersCard" hidden/);
   assert.match(html, /id="adminUserForm"/);
   assert.match(script, /adminUsersCard'\)\.hidden=!hasRole\('ADMINISTRADOR'\)/);
-  assert.match(script, /functions\.invoke\('admin-users'/);
+  assert.match(script, /fetch\(`\$\{SUPABASE_URL\}\/functions\/v1\/admin-users`/);
+  assert.match(script, /apikey:SUPABASE_PUBLISHABLE_KEY/);
   assert.match(script, /assurance\.currentLevel!=='aal2'/);
   assert.match(script, /Authorization:`Bearer \$\{sessionData\.session\.access_token\}`/);
-  assert.match(script, /typeof error\?\.context\?\.json==='function'/);
   assert.match(script, /EMAIL_RATE_LIMIT/);
   assert.match(adminUsers, /inviteCode\.includes\("rate_limit"\)/);
   assert.match(supabaseConfig, /\[functions\.admin-users\]\s+verify_jwt = false/);

@@ -1500,19 +1500,6 @@ function adminUserMessage(message,type=''){
   element.className=`admin-user-message ${type}`.trim();
 }
 
-async function functionErrorCode(error,data){
-  if(data?.error) return data.error;
-  try{
-    if(typeof error?.context?.json==='function'){
-      const payload=await error.context.json();
-      if(payload?.error) return payload.error;
-      if(payload?.code) return payload.code;
-      if(payload?.message) return payload.message;
-    }
-  }catch{}
-  return error?.message||'INVITE_FAILED';
-}
-
 async function inviteAdminUser(event){
   event.preventDefault();
   adminUserMessage('');
@@ -1529,18 +1516,21 @@ async function inviteAdminUser(event){
     }
     const {data:sessionData,error:sessionError}=await supabaseClient.auth.getSession();
     if(sessionError||!sessionData.session) throw new Error('SESSION_EXPIRED');
-    const {data,error}=await supabaseClient.functions.invoke('admin-users',{
-      headers:{Authorization:`Bearer ${sessionData.session.access_token}`},
-      body:{
+    const response=await fetch(`${SUPABASE_URL}/functions/v1/admin-users`,{
+      method:'POST',
+      headers:{
+        apikey:SUPABASE_PUBLISHABLE_KEY,
+        Authorization:`Bearer ${sessionData.session.access_token}`,
+        'content-type':'application/json'
+      },
+      body:JSON.stringify({
         displayName:document.getElementById('adminUserName').value.trim(),
         email:document.getElementById('adminUserEmail').value.trim().toLowerCase(),
         role:document.getElementById('adminUserRole').value
-      }
+      })
     });
-    if(error){
-      const code=await functionErrorCode(error,data);
-      throw new Error(code);
-    }
+    const data=await response.json().catch(()=>({}));
+    if(!response.ok) throw new Error(data?.error||`HTTP_${response.status}`);
     if(!data?.ok) throw new Error(data?.error||'INVITE_FAILED');
     event.currentTarget.reset();
     adminUserMessage('Invitación enviada y rol asignado correctamente.','ok');
