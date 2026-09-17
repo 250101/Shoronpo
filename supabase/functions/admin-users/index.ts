@@ -63,10 +63,10 @@ Deno.serve(async (request) => {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
-  const { data: userResult, error: userError } = await adminClient.auth.getUser(
-    token,
-  );
-  if (userError || !userResult.user) {
+  const { data: claimsResult, error: claimsError } = await userClient.auth
+    .getClaims(token);
+  if (claimsError || !claimsResult?.claims?.sub) {
+    console.error("ADMIN_AUTH_FAILED", claimsError?.code ?? "missing_claims");
     return response({ error: "UNAUTHORIZED" }, 401, origin);
   }
   const { data: authorized, error: authorizationError } = await userClient.rpc(

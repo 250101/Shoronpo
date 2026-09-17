@@ -102,6 +102,6 @@ test("la administración de usuarios sólo se muestra a administradores e invoca
   assert.match(script, /EMAIL_RATE_LIMIT/);
   assert.match(adminUsers, /inviteCode\.includes\("rate_limit"\)/);
   assert.match(supabaseConfig, /\[functions\.admin-users\]\s+verify_jwt = false/);
-  assert.match(adminUsers, /adminClient\.auth\.getUser/);
+  assert.match(adminUsers, /userClient\.auth\s*\.getClaims\(token\)/);
   assert.match(adminUsers, /userClient\.rpc\(\s*"is_admin_aal2"/);
 });
