@@ -1502,6 +1502,7 @@ function adminUserMessage(message,type=''){
 
 async function inviteAdminUser(event){
   event.preventDefault();
+  const form=event.currentTarget;
   adminUserMessage('');
   if(!hasRole('ADMINISTRADOR')){adminUserMessage('No tenés permisos para administrar usuarios.','err');return;}
   const button=document.getElementById('adminUserSubmit');
@@ -1532,7 +1533,7 @@ async function inviteAdminUser(event){
     const data=await response.json().catch(()=>({}));
     if(!response.ok) throw new Error(data?.error||`HTTP_${response.status}`);
     if(!data?.ok) throw new Error(data?.error||'INVITE_FAILED');
-    event.currentTarget.reset();
+    form.reset();
     adminUserMessage('Invitación enviada y rol asignado correctamente.','ok');
   }catch(error){
     const messages={

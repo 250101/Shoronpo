@@ -97,6 +97,9 @@ test("la administración de usuarios sólo se muestra a administradores e invoca
   assert.match(script, /adminUsersCard'\)\.hidden=!hasRole\('ADMINISTRADOR'\)/);
   assert.match(script, /fetch\(`\$\{SUPABASE_URL\}\/functions\/v1\/admin-users`/);
   assert.match(script, /apikey:SUPABASE_PUBLISHABLE_KEY/);
+  assert.match(script, /const form=event\.currentTarget/);
+  assert.match(script, /form\.reset\(\)/);
+  assert.doesNotMatch(script, /event\.currentTarget\.reset\(\)/);
   assert.match(script, /assurance\.currentLevel!=='aal2'/);
   assert.match(script, /Authorization:`Bearer \$\{sessionData\.session\.access_token\}`/);
   assert.match(script, /EMAIL_RATE_LIMIT/);
