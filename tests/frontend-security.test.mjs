@@ -11,6 +11,14 @@ const reconciliationHardening = readFileSync(
   new URL("../supabase/migrations/0027_harden_reconciliation_ownership.sql", import.meta.url),
   "utf8",
 );
+const firstAdminMarker = readFileSync(
+  new URL("../supabase/migrations/0008_first_administrator_template.sql", import.meta.url),
+  "utf8",
+);
+const systemAlertsMigration = readFileSync(
+  new URL("../supabase/migrations/0021_system_alerts.sql", import.meta.url),
+  "utf8",
+);
 
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>'"]/g, (char) => ({
@@ -151,4 +159,11 @@ test("Supabase es la única fuente persistente de conciliaciones", () => {
   assert.match(script, /from\('inventory_reconciliations'\)\.insert/);
   assert.match(script, /from\('inventory_reconciliations'\)\.delete/);
   assert.match(script, /conciliaciones=\{\}/);
+});
+
+test("las migraciones de esquema no ejecutan bootstrap ni cron productivo", () => {
+  assert.doesNotMatch(firstAdminMarker, /PLACEHOLDER_UUID|insert into public\.user_roles/i);
+  assert.match(firstAdminMarker, /select 1;/);
+  assert.match(systemAlertsMigration, /create table public\.system_alerts/);
+  assert.doesNotMatch(systemAlertsMigration, /cron\.schedule|cron\.unschedule|refresh_system_alerts\(\);/);
 });

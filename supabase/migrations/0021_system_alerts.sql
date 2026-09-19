@@ -83,18 +83,6 @@ $$;
 
 revoke all on function public.refresh_system_alerts() from public, anon, authenticated;
 
-do $$
-declare v_job_id bigint;
-begin
-  select jobid into v_job_id from cron.job where jobname='shoronpo-refresh-system-alerts';
-  if v_job_id is not null then perform cron.unschedule(v_job_id); end if;
-end;
-$$;
-
-select cron.schedule(
-  'shoronpo-refresh-system-alerts',
-  '*/15 * * * *',
-  'select public.refresh_system_alerts();'
-);
-
-select public.refresh_system_alerts();
+-- La creación del esquema no activa trabajos ni genera incidentes. El cron
+-- se instala de forma explícita durante la fase operativa, después de que el
+-- entorno tenga funciones, secretos y sincronizaciones propios.

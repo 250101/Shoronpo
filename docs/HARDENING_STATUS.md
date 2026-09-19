@@ -59,3 +59,7 @@ Estado iniciado el 17-09-2026. El rediseño visual se realizará después de cer
 - Un build de producción falla si faltan las variables o si intenta apuntar al proyecto de desarrollo.
 - Las pruebas cubren staging, producción sin configuración, reutilización accidental de desarrollo y un proyecto productivo independiente.
 - Pendiente: crear el proyecto Supabase productivo, aplicar migraciones, separar secretos/cron y cargar las variables productivas en Netlify.
+- Proyecto productivo creado: `shoronpo-prod` (`krpiprwplhxrxlhzcuak`, `eu-west-2`).
+- Esquema productivo aplicado y verificado vacío; cron y secretos permanecen deliberadamente desactivados.
+- El despliegue real detectó y corrigió dos mezclas peligrosas entre bootstrap/esquema y activación operativa en `0008` y `0021`.
+- Pendiente: primer administrador, funciones/secretos separados, variables productivas de Netlify y pruebas de aceptación.
