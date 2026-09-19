@@ -1456,8 +1456,10 @@ function getImpactoConc(data){
 
 // ── Autenticación Supabase (Fase 2) ───────────────────────────
 const INITIAL_AUTH_FLOW_TYPE=new URLSearchParams(location.hash.replace(/^#/,''))?.get('type')||'';
-const SUPABASE_URL='https://htuearldqvzqohoxwmdp.supabase.co';
-const SUPABASE_PUBLISHABLE_KEY='sb_publishable_KZKbJob8_QwdWs3VUPVKgw_6IVK0LQV';
+const runtimeConfig=globalThis.SHORONPO_CONFIG;
+if(!runtimeConfig?.supabaseUrl||!runtimeConfig?.supabasePublishableKey) throw new Error('Falta la configuración pública de Supabase.');
+const SUPABASE_URL=runtimeConfig.supabaseUrl;
+const SUPABASE_PUBLISHABLE_KEY=runtimeConfig.supabasePublishableKey;
 const supabaseClient=window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY,{
   auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}
 });

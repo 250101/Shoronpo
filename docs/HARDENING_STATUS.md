@@ -17,7 +17,7 @@ Estado iniciado el 17-09-2026. El rediseño visual se realizará después de cer
 1. Neutralizar contenido HTML no confiable y eliminar eventos inline. **Completado.**
 2. Dividir el frontend monolítico y retirar `unsafe-inline` de scripts en la CSP. **Completado.**
 3. Incorporar administración segura de usuarios y roles con MFA y SMTP propio. **MFA, invitación real, contraseña y roles completados; SMTP propio pendiente.**
-4. Separar staging y producción, incluidos base, secretos, cron y URL.
+4. Separar staging y producción, incluidos base, secretos, cron y URL. **Guardas de frontend completadas; proyecto productivo pendiente.**
 5. Automatizar backups cifrados y validar restauraciones.
 6. Retirar `localStorage` como estado paralelo de conciliaciones. **Completado.**
 7. Separar pruebas e incidentes reales en el panel operativo.
@@ -51,3 +51,11 @@ Estado iniciado el 17-09-2026. El rediseño visual se realizará después de cer
 - Las conciliaciones se reconstruyen exclusivamente desde `inventory_reconciliations` al cargar el histórico.
 - Las actualizaciones optimistas de pantalla se revierten si Supabase rechaza el alta o la baja.
 - Una prueba de regresión impide reintroducir almacenamiento persistente local.
+
+## 5. Separación staging/producción — en curso
+
+- La configuración pública de Supabase se genera por entorno durante el build de Netlify.
+- Los deploys de rama conservan el proyecto `shoronpo-dev` como staging.
+- Un build de producción falla si faltan las variables o si intenta apuntar al proyecto de desarrollo.
+- Las pruebas cubren staging, producción sin configuración, reutilización accidental de desarrollo y un proyecto productivo independiente.
+- Pendiente: crear el proyecto Supabase productivo, aplicar migraciones, separar secretos/cron y cargar las variables productivas en Netlify.
