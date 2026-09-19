@@ -19,7 +19,7 @@ Estado iniciado el 17-09-2026. El rediseño visual se realizará después de cer
 3. Incorporar administración segura de usuarios y roles con MFA y SMTP propio. **MFA, invitación real, contraseña y roles completados; SMTP propio pendiente.**
 4. Separar staging y producción, incluidos base, secretos, cron y URL.
 5. Automatizar backups cifrados y validar restauraciones.
-6. Retirar `localStorage` como estado paralelo de conciliaciones.
+6. Retirar `localStorage` como estado paralelo de conciliaciones. **Completado.**
 7. Separar pruebas e incidentes reales en el panel operativo.
 
 ## 2. Renderizado seguro del frontend — completado
@@ -44,3 +44,10 @@ Estado iniciado el 17-09-2026. El rediseño visual se realizará después de cer
 - La migración `0027` refuerza la defensa en base de datos: impide suplantar `created_by` y revoca la escritura sobre conciliaciones cuando el usuario deja de ser OBRADOR o pierde acceso al local.
 - Se regularizó y verificó el historial remoto de migraciones `0001`–`0027`.
 - Queda pendiente configurar SMTP propio para no depender del límite temporal del correo integrado de Supabase.
+
+## 4. Fuente única de conciliaciones — completado
+
+- Se eliminó la persistencia paralela en `localStorage`.
+- Las conciliaciones se reconstruyen exclusivamente desde `inventory_reconciliations` al cargar el histórico.
+- Las actualizaciones optimistas de pantalla se revierten si Supabase rechaza el alta o la baja.
+- Una prueba de regresión impide reintroducir almacenamiento persistente local.

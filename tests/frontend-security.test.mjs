@@ -144,3 +144,11 @@ test("la base revoca escritura al perder el rol Obrador y protege el autor", () 
     assert.match(reconciliationHardening, new RegExp(`inventory_reconciliations_${operation}_authorized`));
   }
 });
+
+test("Supabase es la única fuente persistente de conciliaciones", () => {
+  assert.doesNotMatch(script, /localStorage/);
+  assert.doesNotMatch(script, /saveConciliaciones|loadConciliaciones/);
+  assert.match(script, /from\('inventory_reconciliations'\)\.insert/);
+  assert.match(script, /from\('inventory_reconciliations'\)\.delete/);
+  assert.match(script, /conciliaciones=\{\}/);
+});

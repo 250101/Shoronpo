@@ -74,7 +74,7 @@ async function fetchHistorico(){
         coincide:counts.COINCIDE||0,leve:counts.LEVE||0,elevada:counts.ELEVADA||0,impacto:totalImpact,
         metrics:metricsByPeriod[period.id]||null});
     });
-    recalcularImpactosHistorico();saveConciliaciones();renderHistPreview();renderNavVisibility();
+    recalcularImpactosHistorico();renderHistPreview();renderNavVisibility();
     renderCompararSelector();actualizarSelectorSemana();
     if(currentSemana&&historico.quincenas.some(item=>item.quincena===currentSemana)) cambiarSemanaVista(currentSemana);
     else if(currentData.length) renderAll(); else cargarUltimaSemana();
@@ -1201,14 +1201,6 @@ async function delExpFromDatabase(semana, producto, exp){
   if(error) throw error;
 }
 
-function loadConciliaciones(){
-  try{const s=localStorage.getItem('shoronpo_conc');if(s) conciliaciones=JSON.parse(s);}catch(e){}
-}
-
-function saveConciliaciones(){
-  try{localStorage.setItem('shoronpo_conc',JSON.stringify(conciliaciones));}catch(e){}
-}
-
 function getConcKey(producto, semana){
   return producto+'||'+(semana||'actual');
 }
@@ -1368,7 +1360,6 @@ async function guardarExplicacion(producto, semana){
   const nuevoExplicado=conc.explicaciones.reduce((s,e)=>s+e.cantidad,0);
   const nuevoPendiente=Math.max(0,desvAbs-nuevoExplicado);
   conc.estado=nuevoPendiente<=0.01?'CONCILIADA':nuevoExplicado>0?'PARCIAL':'PENDIENTE';
-  saveConciliaciones();
   try{
     await addExpToDatabase(realSemana, producto, exp);
     await refreshPeriodMetrics(realSemana);
@@ -1378,7 +1369,6 @@ async function guardarExplicacion(producto, semana){
     conc.explicaciones=conc.explicaciones.filter(item=>item.id!==exp.id);
     const rollbackTotal=conc.explicaciones.reduce((s,e)=>s+e.cantidad,0);
     conc.estado=rollbackTotal>0?'PARCIAL':'PENDIENTE';
-    saveConciliaciones();
     showNotice('No se guardó la explicación: '+e.message,'err');
   }
   if(currentData.length){
@@ -1407,7 +1397,6 @@ async function borrarExplicacion(producto, semana, idx){
     const pendiente=Math.max(0,desvAbs-expCant);
     conciliaciones[key].estado=pendiente<=0.01?'CONCILIADA':expCant>0?'PARCIAL':'PENDIENTE';
   }
-  saveConciliaciones();
   try{
     await delExpFromDatabase(semana, producto, removedExp);
     await refreshPeriodMetrics(semana);
@@ -1420,7 +1409,6 @@ async function borrarExplicacion(producto, semana, idx){
       const expCant=conciliaciones[key].explicaciones.reduce((s,item)=>s+item.cantidad,0);
       conciliaciones[key].estado=Math.max(0,desvAbs-expCant)<=0.01?'CONCILIADA':'PARCIAL';
     }
-    saveConciliaciones();
     showNotice('No se eliminó la explicación: '+e.message,'err');
   }
   if(currentData.length){
