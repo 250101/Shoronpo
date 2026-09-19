@@ -7,6 +7,10 @@ const script = readFileSync(new URL("../app.js", import.meta.url), "utf8");
 const netlify = readFileSync(new URL("../netlify.toml", import.meta.url), "utf8");
 const adminUsers = readFileSync(new URL("../supabase/functions/admin-users/index.ts", import.meta.url), "utf8");
 const supabaseConfig = readFileSync(new URL("../supabase/config.toml", import.meta.url), "utf8");
+const reconciliationHardening = readFileSync(
+  new URL("../supabase/migrations/0027_harden_reconciliation_ownership.sql", import.meta.url),
+  "utf8",
+);
 
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>'"]/g, (char) => ({
@@ -117,4 +121,26 @@ test("las invitaciones obligan a establecer contraseña antes de activar la apli
   assert.match(html, /data-action="show-password-reset"/);
   assert.match(html, /data-action="request-password-reset"/);
   assert.match(script, /resetPasswordForEmail\(email,\{redirectTo:`\$\{location\.origin\}\//);
+});
+
+test("Dirección conserva lectura global sin acciones de escritura ni administración", () => {
+  assert.match(script, /function canViewInventory\(\)\{return hasRole\('ADMINISTRADOR','DIRECCION','OBRADOR'\);\}/);
+  assert.match(script, /function canManageInventory\(\)\{return hasRole\('ADMINISTRADOR','OBRADOR'\);\}/);
+  assert.match(script, /function canReconcile\(\)\{return hasRole\('ADMINISTRADOR','OBRADOR'\);\}/);
+  assert.match(script, /document\.querySelectorAll\('\[data-write-action\]'\)\.forEach\(el=>el\.style\.display=mayWrite\?'':'none'\)/);
+  assert.match(script, /adminUsersCard'\)\.hidden=!hasRole\('ADMINISTRADOR'\)/);
+  assert.match(script, /if\(!canManageInventory\(\)\)\{showNotice\('Tu rol tiene acceso de solo lectura\.'/);
+  assert.match(script, /if\(!canManageInventory\(\)\)\{showNotice\('Tu rol no puede cargar inventarios\.'/);
+  assert.match(script, /if\(!hasRole\('ADMINISTRADOR'\)\)\{adminUserMessage\('No tenés permisos para administrar usuarios\.'/);
+});
+
+test("la base revoca escritura al perder el rol Obrador y protege el autor", () => {
+  assert.match(reconciliationHardening, /new\.created_by := coalesce\(auth\.uid\(\), new\.created_by\)/);
+  assert.match(reconciliationHardening, /new\.created_by := old\.created_by/);
+  assert.match(reconciliationHardening, /created_by = auth\.uid\(\)/);
+  assert.match(reconciliationHardening, /public\.has_role\('OBRADOR'\)/);
+  assert.doesNotMatch(reconciliationHardening, /public\.has_role\('DIRECCION'\)/);
+  for (const operation of ["insert", "update", "delete"]) {
+    assert.match(reconciliationHardening, new RegExp(`inventory_reconciliations_${operation}_authorized`));
+  }
 });

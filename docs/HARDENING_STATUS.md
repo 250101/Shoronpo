@@ -16,7 +16,7 @@ Estado iniciado el 17-09-2026. El rediseño visual se realizará después de cer
 
 1. Neutralizar contenido HTML no confiable y eliminar eventos inline. **Completado.**
 2. Dividir el frontend monolítico y retirar `unsafe-inline` de scripts en la CSP. **Completado.**
-3. Incorporar administración segura de usuarios y roles con MFA y SMTP propio. **MFA y administración completados; SMTP propio pendiente.**
+3. Incorporar administración segura de usuarios y roles con MFA y SMTP propio. **MFA, invitación real, contraseña y roles completados; SMTP propio pendiente.**
 4. Separar staging y producción, incluidos base, secretos, cron y URL.
 5. Automatizar backups cifrados y validar restauraciones.
 6. Retirar `localStorage` como estado paralelo de conciliaciones.
@@ -31,7 +31,7 @@ Estado iniciado el 17-09-2026. El rediseño visual se realizará después de cer
 - El CSS y JavaScript se separaron en `styles.css` y `app.js`; la CSP ya bloquea scripts y atributos de script inline.
 - `style-src` conserva temporalmente `unsafe-inline` sólo para estilos visuales heredados en atributos; no habilita ejecución de JavaScript.
 
-## 3. Usuarios, roles y MFA — activo
+## 3. Usuarios, roles y MFA — funcional; SMTP pendiente
 
 - La migración `0026` está aplicada y exige una sesión `aal2` para asignar/revocar roles y activar/desactivar usuarios.
 - La prueba directa confirmó `aal1 = false` y `aal2 = true` para la cuenta administradora.
@@ -39,4 +39,8 @@ Estado iniciado el 17-09-2026. El rediseño visual se realizará después de cer
 - Las invitaciones admiten los roles cerrados `ADMINISTRADOR`, `DIRECCION`, `OBRADOR` y `RESTAURANTE`.
 - El preflight CORS fue corregido y probado (`204`); origen no permitido devuelve `403` y ausencia de sesión devuelve `401`.
 - El frontend incluye enrolamiento/desafío TOTP y una ficha exclusiva para administradores que permite invitar usuarios y asignar su rol inicial.
-- Pendiente antes de considerar cerrado todo el bloque: validar una invitación real de punta a punta y configurar SMTP propio para evitar depender de los límites del correo integrado de Supabase.
+- La invitación real de `DIRECCION` fue validada de punta a punta: correo, establecimiento de contraseña, inicio de sesión y carga de las seis fichas de lectura.
+- La sesión de Dirección no expone carga/cierre de inventario, edición de conciliaciones ni administración de usuarios. El panel Sistema ofrece sólo lectura operativa.
+- La migración `0027` refuerza la defensa en base de datos: impide suplantar `created_by` y revoca la escritura sobre conciliaciones cuando el usuario deja de ser OBRADOR o pierde acceso al local.
+- Se regularizó y verificó el historial remoto de migraciones `0001`–`0027`.
+- Queda pendiente configurar SMTP propio para no depender del límite temporal del correo integrado de Supabase.
