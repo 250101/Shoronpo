@@ -67,3 +67,4 @@ Estado iniciado el 17-09-2026. El rediseño visual se realizará después de cer
 - URL principal autorizada: `https://shoronpo.netlify.app`.
 - Función `admin-users` desplegada con origen e invitaciones limitados al sitio productivo.
 - Los cron y conectores operativos permanecen desactivados hasta su fase de activación.
+- Aceptación productiva completada el 20-09-2026: frontend conectado, inicio de sesión correcto y rol `ADMINISTRADOR` verificado en interfaz.
