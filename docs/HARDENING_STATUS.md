@@ -16,7 +16,7 @@ Estado iniciado el 17-09-2026. El rediseño visual se realizará después de cer
 
 1. Neutralizar contenido HTML no confiable y eliminar eventos inline. **Completado.**
 2. Dividir el frontend monolítico y retirar `unsafe-inline` de scripts en la CSP. **Completado.**
-3. Incorporar administración segura de usuarios y roles con MFA y SMTP propio. **MFA, invitación real, contraseña y roles completados; SMTP propio pendiente.**
+3. Incorporar administración segura de usuarios y roles con MFA y SMTP propio. **Completado para la etapa actual.**
 4. Separar staging y producción, incluidos base, secretos, cron y URL. **Guardas de frontend completadas; proyecto productivo pendiente.**
 5. Automatizar backups cifrados y validar restauraciones.
 6. Retirar `localStorage` como estado paralelo de conciliaciones. **Completado.**
@@ -31,7 +31,7 @@ Estado iniciado el 17-09-2026. El rediseño visual se realizará después de cer
 - El CSS y JavaScript se separaron en `styles.css` y `app.js`; la CSP ya bloquea scripts y atributos de script inline.
 - `style-src` conserva temporalmente `unsafe-inline` sólo para estilos visuales heredados en atributos; no habilita ejecución de JavaScript.
 
-## 3. Usuarios, roles y MFA — funcional; SMTP pendiente
+## 3. Usuarios, roles, MFA y correo — completado
 
 - La migración `0026` está aplicada y exige una sesión `aal2` para asignar/revocar roles y activar/desactivar usuarios.
 - La prueba directa confirmó `aal1 = false` y `aal2 = true` para la cuenta administradora.
@@ -43,8 +43,10 @@ Estado iniciado el 17-09-2026. El rediseño visual se realizará después de cer
 - La sesión de Dirección no expone carga/cierre de inventario, edición de conciliaciones ni administración de usuarios. El panel Sistema ofrece sólo lectura operativa.
 - La migración `0027` refuerza la defensa en base de datos: impide suplantar `created_by` y revoca la escritura sobre conciliaciones cuando el usuario deja de ser OBRADOR o pierde acceso al local.
 - Se regularizó y verificó el historial remoto de migraciones `0001`–`0027`.
-- Queda pendiente configurar SMTP propio para no depender del límite temporal del correo integrado de Supabase.
-- Fase 2 reabierta en una tarea dedicada: auditoría remota aprobada y recuperación endurecida contra enumeración, límites e indisponibilidad; falta conectar el proveedor SMTP.
+- SMTP personalizado activo mediante la cuenta técnica exclusiva `shoronpoinventario@gmail.com`, con contraseña de aplicación y `smtp.gmail.com:587`.
+- La prueba negativa con credencial incorrecta produjo el rechazo 534 esperado y quedó registrada; tras corregirla, la recuperación real devolvió HTTP 200 y el correo fue recibido por la cuenta administradora.
+- La recuperación está endurecida contra enumeración de cuentas y presenta mensajes específicos para límite de frecuencia, indisponibilidad y fallos de red.
+- Gmail queda aceptado para el volumen inicial. Cuando exista dominio propio se migrará a un proveedor transaccional con SPF, DKIM y DMARC.
 
 ## 4. Fuente única de conciliaciones — completado
 

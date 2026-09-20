@@ -9,31 +9,33 @@ Invitaciones, recuperación y cambio de contraseña confiables, sin depender del
 - `site_url` y las redirecciones autorizadas apuntan al deploy de staging.
 - La confirmación de email está activa.
 - TOTP está habilitado para enrolamiento y verificación.
-- El SMTP predeterminado de Supabase sigue activo; está limitado y no es apto para producción.
+- SMTP personalizado activo en `shoronpo-dev` mediante la cuenta técnica `shoronpoinventario@gmail.com`, contraseña de aplicación y `smtp.gmail.com:587`.
+- La recuperación real devolvió HTTP 200 y el correo fue recibido por la cuenta administradora.
 - Invitación real, establecimiento de contraseña e inicio de sesión con rol `DIRECCION` ya fueron validados.
 - La recuperación ahora diferencia límite de frecuencia, indisponibilidad y errores de entrada sin enumerar cuentas.
 
-## Proveedor recomendado
+## Proveedor adoptado
 
-1. **Resend con dominio propio**: primera opción. Tiene relay SMTP, autenticación DKIM/SPF/DMARC y un plan gratuito suficiente para el volumen operativo previsto.
-2. **Brevo o SMTP corporativo**: alternativa si Shoronpo ya dispone de un remitente verificado allí.
-3. **Gmail con contraseña de aplicación**: sólo contingencia temporal; no es la opción recomendada para correo operativo.
+Se adoptó Gmail con una cuenta técnica exclusiva porque Shoronpo todavía no dispone de dominio propio. Es suficiente para el volumen inicial, pero Supabase advierte que un proveedor personal puede tener menor entregabilidad que uno transaccional. Al adquirir un dominio, se migrará a un relay con SPF, DKIM y DMARC sin cambiar el flujo de la aplicación.
 
-## Datos necesarios para completar SMTP
+## Configuración aplicada
 
-- Dominio o dirección remitente que se puede verificar.
-- Host y puerto SMTP.
-- Usuario SMTP.
-- Contraseña SMTP, introducida directamente en Supabase por el propietario; nunca guardada en Git ni enviada por chat.
-- Nombre visible y dirección `From`, por ejemplo `Shoronpo <no-reply@auth.dominio.es>`.
+- Remitente y usuario: `shoronpoinventario@gmail.com`.
+- Nombre visible: `Shoronpo`.
+- Host y puerto: `smtp.gmail.com:587`.
+- Intervalo mínimo por usuario: 60 segundos.
+- La contraseña de aplicación fue introducida directamente en Supabase y no se almacena en Git.
 
-## Pruebas de aprobación pendientes
+## Evidencia de aprobación
 
-1. Enviar invitación a una cuenta nueva y establecer contraseña.
-2. Solicitar recuperación y comprobar que el enlace sólo funciona una vez.
-3. Forzar segundo envío inmediato y verificar respuesta de límite comprensible.
-4. Desactivar la cuenta y confirmar que una sesión previa pierde acceso a datos.
-5. Reactivar y cambiar el rol; comprobar RLS y visibilidad del frontend.
-6. Verificar MFA del administrador y rechazo con sesión `aal1`.
-7. Revisar entrega, spam, SPF, DKIM y DMARC en el proveedor.
+1. Invitación real, establecimiento de contraseña e inicio con rol `DIRECCION`: aprobado previamente.
+2. Recuperación real por SMTP personalizado: HTTP 200 y recepción confirmada el 20-09-2026.
+3. Credencial inválida forzada: Google devolvió 534 y Supabase registró el fallo sin marcarlo como éxito; corregida con una nueva contraseña de aplicación.
+4. Mensaje de recuperación genérico: aprobado, sin enumeración de cuentas.
+5. Manejo de límite, indisponibilidad y errores de red: cubierto por pruebas automatizadas.
+6. MFA del administrador y rechazo de operaciones privilegiadas con `aal1`: aprobado.
 
+## Controles posteriores
+
+- Probar caducidad y uso único del enlace en una ventana operativa que no obligue a cambiar la contraseña administradora actual.
+- Migrar a dominio propio con SPF, DKIM y DMARC cuando Shoronpo disponga de uno.
