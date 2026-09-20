@@ -62,4 +62,8 @@ Estado iniciado el 17-09-2026. El rediseño visual se realizará después de cer
 - Proyecto productivo creado: `shoronpo-prod` (`krpiprwplhxrxlhzcuak`, `eu-west-2`).
 - Esquema productivo aplicado y verificado vacío; cron y secretos permanecen deliberadamente desactivados.
 - El despliegue real detectó y corrigió dos mezclas peligrosas entre bootstrap/esquema y activación operativa en `0008` y `0021`.
-- Pendiente: primer administrador, funciones/secretos separados, variables productivas de Netlify y pruebas de aceptación.
+- Administrador inicial creado y autorizado; variables productivas de Netlify configuradas únicamente para producción.
+- Supabase producción: `shoronpo-prod` (`krpiprwplhxrxlhzcuak`), aislado de staging.
+- URL principal autorizada: `https://shoronpo.netlify.app`.
+- Función `admin-users` desplegada con origen e invitaciones limitados al sitio productivo.
+- Los cron y conectores operativos permanecen desactivados hasta su fase de activación.
