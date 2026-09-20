@@ -44,6 +44,7 @@ Estado iniciado el 17-09-2026. El rediseño visual se realizará después de cer
 - La migración `0027` refuerza la defensa en base de datos: impide suplantar `created_by` y revoca la escritura sobre conciliaciones cuando el usuario deja de ser OBRADOR o pierde acceso al local.
 - Se regularizó y verificó el historial remoto de migraciones `0001`–`0027`.
 - Queda pendiente configurar SMTP propio para no depender del límite temporal del correo integrado de Supabase.
+- Fase 2 reabierta en una tarea dedicada: auditoría remota aprobada y recuperación endurecida contra enumeración, límites e indisponibilidad; falta conectar el proveedor SMTP.
 
 ## 4. Fuente única de conciliaciones — completado
 

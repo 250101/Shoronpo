@@ -1570,10 +1570,23 @@ function showPasswordReset(){
 async function requestPasswordReset(){
   const email=document.getElementById('authEmail').value.trim().toLowerCase();
   if(!email){authMessage('Ingresá primero el email de la cuenta.');return;}
+  const button=document.getElementById('passwordResetRequest');
+  button.disabled=true;
   authMessage('Enviando enlace seguro…');
-  const {error}=await supabaseClient.auth.resetPasswordForEmail(email,{redirectTo:`${location.origin}/`});
-  if(error){authMessage('No se pudo enviar el enlace. Esperá unos minutos y reintentá.');return;}
-  authMessage('Te enviamos un enlace para establecer la contraseña. Revisá también spam.');
+  try{
+    const {error}=await supabaseClient.auth.resetPasswordForEmail(email,{redirectTo:`${location.origin}/`});
+    if(error) throw error;
+    // Respuesta deliberadamente neutra para no confirmar si una cuenta existe.
+    authMessage('Si el email está registrado, recibirá un enlace. Revisá también spam.');
+  }catch(error){
+    const code=String(error?.code||'').toLowerCase();
+    const status=Number(error?.status||0);
+    if(status===429||code.includes('rate_limit')) authMessage('Se solicitaron demasiados enlaces. Esperá unos minutos antes de reintentar.');
+    else if(!status||status>=500) authMessage('El servicio de correo no está disponible. Reintentá en unos minutos o contactá al administrador.');
+    else authMessage('No se pudo solicitar el enlace. Revisá el email y reintentá.');
+  }finally{
+    button.disabled=false;
+  }
 }
 
 async function requireAdminMfa(access){
@@ -1746,7 +1759,7 @@ async function initializeApp(){
     if(hashParams.get('error')){
       const description=hashParams.get('error_description')?.replace(/\+/g,' ');
       authMessage(description==='Email link is invalid or has expired'
-        ?'El enlace venció o ya fue utilizado. Solicitá uno nuevo desde Supabase.'
+        ?'El enlace venció o ya fue utilizado. Solicitá uno nuevo desde la pantalla de acceso.'
         :(description||'El enlace de acceso no es válido.'));
       history.replaceState({},document.title,location.pathname);
     }

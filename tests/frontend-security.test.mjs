@@ -131,6 +131,16 @@ test("las invitaciones obligan a establecer contraseña antes de activar la apli
   assert.match(script, /resetPasswordForEmail\(email,\{redirectTo:`\$\{location\.origin\}\//);
 });
 
+test("la recuperación de contraseña limita reintentos y no enumera cuentas", () => {
+  assert.match(html, /id="passwordResetRequest"/);
+  assert.match(script, /button\.disabled=true/);
+  assert.match(script, /button\.disabled=false/);
+  assert.match(script, /Si el email está registrado, recibirá un enlace/);
+  assert.match(script, /status===429\|\|code\.includes\('rate_limit'\)/);
+  assert.match(script, /El servicio de correo no está disponible/);
+  assert.doesNotMatch(script, /Solicitá uno nuevo desde Supabase/);
+});
+
 test("Dirección conserva lectura global sin acciones de escritura ni administración", () => {
   assert.match(script, /function canViewInventory\(\)\{return hasRole\('ADMINISTRADOR','DIRECCION','OBRADOR'\);\}/);
   assert.match(script, /function canManageInventory\(\)\{return hasRole\('ADMINISTRADOR','OBRADOR'\);\}/);
