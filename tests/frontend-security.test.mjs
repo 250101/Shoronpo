@@ -95,12 +95,14 @@ test("un fallo transitorio de permisos conserva la sesión para poder reintentar
   assert.match(script, /roles!inner\(code\)/);
 });
 
-test("la función administrativa responde al preflight sin cuerpo y admite todos los roles", () => {
+test("la función administrativa responde al preflight y bloquea RESTAURANTE durante el go-live", () => {
   assert.match(adminUsers, /status === 204/);
   assert.match(adminUsers, /new Response\(null/);
-  for (const role of ["ADMINISTRADOR", "DIRECCION", "OBRADOR", "RESTAURANTE"]) {
+  for (const role of ["ADMINISTRADOR", "DIRECCION", "OBRADOR"]) {
     assert.ok(adminUsers.includes(`"${role}"`), `Falta el rol ${role}`);
   }
+  assert.ok(!adminUsers.includes('"RESTAURANTE"'));
+  assert.doesNotMatch(html, /<option value="RESTAURANTE">/);
 });
 
 test("la administración de usuarios sólo se muestra a administradores e invoca el backend", () => {

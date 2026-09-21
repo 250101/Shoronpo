@@ -36,7 +36,7 @@ Estado iniciado el 17-09-2026. El rediseño visual se realizará después de cer
 - La migración `0026` está aplicada y exige una sesión `aal2` para asignar/revocar roles y activar/desactivar usuarios.
 - La prueba directa confirmó `aal1 = false` y `aal2 = true` para la cuenta administradora.
 - La función `admin-users` está desplegada sin exponer `service_role` al navegador; valida origen, JWT, rol ADMINISTRADOR y MFA.
-- Las invitaciones admiten los roles cerrados `ADMINISTRADOR`, `DIRECCION`, `OBRADOR` y `RESTAURANTE`.
+- Las invitaciones admiten `ADMINISTRADOR`, `DIRECCION` y `OBRADOR`. `RESTAURANTE` se conserva en la base para integridad histÃ³rica, pero queda temporalmente bloqueado en frontend y backend hasta implementar y validar sus permisos funcionales.
 - El preflight CORS fue corregido y probado (`204`); origen no permitido devuelve `403` y ausencia de sesión devuelve `401`.
 - El frontend incluye enrolamiento/desafío TOTP y una ficha exclusiva para administradores que permite invitar usuarios y asignar su rol inicial.
 - La invitación real de `DIRECCION` fue validada de punta a punta: correo, establecimiento de contraseña, inicio de sesión y carga de las seis fichas de lectura.

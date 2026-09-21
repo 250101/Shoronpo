@@ -4,7 +4,6 @@ const allowedRoles = new Set([
   "ADMINISTRADOR",
   "DIRECCION",
   "OBRADOR",
-  "RESTAURANTE",
 ]);
 const allowedOrigin = Deno.env.get("ADMIN_APP_ORIGIN") ?? "";
 const inviteRedirect = Deno.env.get("ADMIN_INVITE_REDIRECT_URL") ?? "";
