@@ -46,3 +46,11 @@ Los endpoints desplegados también se prueban con una clave deliberadamente inv�
 - Staging no envía alertas al grupo productivo durante los ensayos.
 - Producción se despliega sólo después de verificar staging y nunca se fuerza una expiración real de su sesión.
 
+## Resultado de validación
+
+- Staging mostró las tres sincronizaciones operativas, el conector `HEALTHY` y ningún incidente activo ni error de navegador.
+- La migración `0028` quedó aplicada en staging y producción.
+- Las cinco Edge Functions quedaron desplegadas en ambos entornos.
+- Los cinco endpoints rechazaron una clave deliberadamente inválida con HTTP `401` tanto en staging como en producción, sin crear corridas ni alertas.
+- Producción conserva cron, credenciales de tSpoonLab y Telegram desactivados hasta la activación operativa explícita.
+- La prueba SQL transaccional queda pendiente de ejecución local porque Docker Desktop no estaba disponible; la migración remota sí fue aplicada y validada mediante el panel.
