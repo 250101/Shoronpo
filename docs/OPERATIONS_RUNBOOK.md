@@ -41,7 +41,7 @@ La sesión expirada no altera ni elimina datos existentes: detiene las nuevas im
 
 ## Backup manual en plan Free
 
-Ejecutar `scripts/backup_supabase.ps1` todos los lunes y antes/después de migraciones o importaciones masivas. Verificar `manifest.json`, conservar ocho copias semanales y doce mensuales, y mantener una segunda copia cifrada fuera del equipo. Una vez al mes restaurar la copia en un proyecto temporal, validar conteos, RLS y permisos, y documentar el resultado.
+Ejecutar `scripts/backup_supabase.ps1 -ProjectRef krpiprwplhxrxlhzcuak -Environment production` todos los lunes y antes/después de migraciones o importaciones masivas. Verificar con `scripts/verify_backup.ps1`, conservar ocho copias semanales y doce mensuales, y mantener una segunda copia cifrada fuera del equipo. Una vez al mes restaurar con `scripts/restore_supabase_test.ps1` en un proyecto temporal vacío, validar conteos, RLS y permisos, y documentar el resultado. RPO normal: 7 días; RTO objetivo: 4 horas.
 
 ## Responsabilidades
 

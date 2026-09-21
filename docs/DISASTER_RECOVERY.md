@@ -1,100 +1,173 @@
 # Protocolo de backup y recuperación — Shoronpo
 
-## Objetivos
+## Alcance y objetivos
 
-- Recuperar la operación sin improvisar ni sobrescribir la única copia de los datos.
-- Mantener copias manuales fuera del repositorio mientras Supabase esté en el plan Free.
-- Probar cada restauración en un proyecto nuevo antes de cualquier cambio de producción.
+Este protocolo cubre la base PostgreSQL de Supabase en plan Free. El backup lógico incluye el esquema `public`, sus datos y los datos de `auth`; no incluye objetos binarios de Storage, secretos, configuración de Auth, Edge Functions ni variables de Netlify. Esos componentes se reconstruyen desde Git y desde el inventario seguro de secretos.
 
-## Frecuencia y conservación
+- **RPO normal:** hasta 7 días, por el backup semanal.
+- **RPO de cambios:** cero respecto del punto inmediatamente anterior a una migración o importación, porque se exige una copia previa.
+- **RTO objetivo:** 4 horas para una base pequeña, sujeto a disponibilidad de Supabase, creación del proyecto temporal y validación funcional.
+- Nunca se restaura encima del proyecto afectado. El reemplazo se valida primero en otro proyecto.
 
-Crear un backup todos los lunes, antes y después de una migración, antes de una importación masiva y después de un cambio importante de permisos o roles.
+## Proyectos identificados
 
-Conservar ocho copias semanales y doce mensuales. Mantener al menos dos copias en medios diferentes; una debe estar cifrada y fuera del equipo habitual. Los backups contienen datos reales y nunca se suben a Git.
+- Staging: `shoronpo-dev` — `htuearldqvzqohoxwmdp`.
+- Producción: `shoronpo-prod` — `krpiprwplhxrxlhzcuak`.
 
-## Preparación única del equipo de respaldo
+Los scripts exigen indicar la referencia y rechazan una cadena de otro proyecto. No reutilizar la referencia de staging para una copia productiva.
 
-1. Instalar las herramientas de línea de comandos de PostgreSQL 17 (`pg_dump` y `pg_dumpall`). Docker no es necesario.
-2. Ejecutar `powershell -ExecutionPolicy Bypass -File scripts/backup_supabase.ps1 -PreflightOnly`.
-3. Preparar un segundo destino cifrado para la copia externa.
+## Frecuencia, conservación y destinos
 
-## Crear un backup
+Crear una copia de producción todos los lunes, antes y después de migraciones, antes de una importación masiva y después de cambios importantes de permisos. Conservar ocho semanales y doce mensuales.
 
-1. En Supabase abrir el proyecto `shoronpo-dev` y elegir **Connect**.
-2. Copiar la cadena de conexión directa o de sesión.
-3. Abrir PowerShell dentro del repositorio y ejecutar:
+Mantener dos copias completas:
+
+1. Carpeta local `Documents\Shoronpo-Backups`.
+2. Copia cifrada en Google Drive o en un disco externo separado.
+
+Los backups contienen datos personales y nunca se suben a Git ni se dejan en enlaces públicos.
+
+## Preparación del equipo
+
+1. Instalar herramientas PostgreSQL 17 (`pg_dump` y `psql`). Docker no es necesario.
+2. Ejecutar:
 
    ```powershell
-   $env:SHORONPO_DB_URL = Read-Host 'Pegá la cadena de conexión de Supabase'
-   powershell -ExecutionPolicy Bypass -File scripts/backup_supabase.ps1
+   powershell -NoProfile -ExecutionPolicy Bypass -File scripts/backup_supabase.ps1 `
+     -ProjectRef krpiprwplhxrxlhzcuak -Environment production -PreflightOnly
    ```
 
-4. El script crea `roles.sql`, `schema.sql`, `data.sql` y `manifest.json`, comprueba que no estén vacíos y calcula SHA-256.
-5. Copiar la carpeta completa a un segundo medio cifrado.
-6. Cerrar la terminal. El script elimina `SHORONPO_DB_URL` al terminar, incluso si falla.
+3. Confirmar `OK` y preparar el segundo destino cifrado.
 
-## Verificación mensual
+## Crear y verificar un backup productivo
 
-1. Crear un proyecto Supabase temporal y vacío.
-2. Nunca usar la referencia de producción `htuearldqvzqohoxwmdp` como destino del ensayo.
-3. Seguir la guía oficial de restauración de Supabase con `psql`, en este orden: `roles.sql`, `schema.sql`, `data.sql`.
-4. Verificar los conteos:
+1. En Supabase, abrir `shoronpo-prod` y copiar la conexión **Session pooler**. No usar Transaction pooler.
+2. En PowerShell, dentro del repositorio:
 
-   ```sql
-   select count(*) from public.products;
-   select count(*) from public.inventory_periods;
-   select count(*) from public.inventory_lines;
-   select count(*) from public.inventory_reconciliations;
+   ```powershell
+   $secure = Read-Host 'Pega la conexion Session pooler de produccion' -AsSecureString
+   $pointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
+   try {
+     $env:SHORONPO_DB_URL = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($pointer)
+     powershell -NoProfile -ExecutionPolicy Bypass -File scripts/backup_supabase.ps1 `
+       -ProjectRef krpiprwplhxrxlhzcuak -Environment production
+   } finally {
+     [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($pointer)
+     Remove-Item Env:SHORONPO_DB_URL -ErrorAction SilentlyContinue
+   }
    ```
 
-5. Confirmar que todas las tablas de negocio tienen RLS:
+3. El script no expone la contraseña en los argumentos de `pg_dump`, crea primero una carpeta oculta parcial y sólo la publica cuando los tres archivos y el manifiesto son válidos.
+4. Verificar nuevamente la copia antes de moverla:
 
-   ```sql
-   select n.nspname, c.relname, c.relrowsecurity
-   from pg_class c
-   join pg_namespace n on n.oid = c.relnamespace
-   where n.nspname = 'public' and c.relkind = 'r'
-   order by c.relname;
+   ```powershell
+   powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify_backup.ps1 `
+     -BackupPath 'C:\Users\marti\Documents\Shoronpo-Backups\production-...' `
+     -ExpectedProjectRef krpiprwplhxrxlhzcuak -ExpectedEnvironment production
    ```
 
-6. Crear usuarios de prueba y repetir las pruebas de permisos de `supabase/tests/0010_inventory_domain_test.sql`.
-7. Eliminar el proyecto temporal sólo después de documentar el resultado del ensayo.
+5. La primera vez, crear una frase secreta de al menos 16 caracteres y guardarla tambien en el gestor de contrasenas:
 
-## Protocolo ante incidentes
+   ```powershell
+   powershell -NoProfile -ExecutionPolicy Bypass -File scripts/setup_backup_secret.ps1
+   ```
 
-### El sitio no carga, pero Supabase funciona
+6. Cifrar, comprobar y subir la copia a Google Drive:
 
-1. No restaurar la base de datos.
-2. Revisar el último deploy de Netlify y la consola del navegador.
-3. Volver a publicar el último deploy exitoso o el tag `pre-supabase-cutover-2026-09-15` si el incidente pertenece al frontend.
-4. El tag anterior a Supabase depende de reactivar manualmente el Apps Script archivado.
+   ```powershell
+   powershell -NoProfile -ExecutionPolicy Bypass -File scripts/protect_and_upload_backup.ps1 `
+     -BackupPath 'C:\Users\marti\Documents\Shoronpo-Backups\production-...'
+   ```
 
-### Un usuario no puede ingresar
+   El remoto `shoronpo-drive` debe usar el alcance `drive.file`. La frase queda protegida por DPAPI para el usuario de Windows; no se guarda en Git ni en Drive. Para comprobar que una copia remota descargada es descifrable:
 
-1. No restaurar la base completa.
-2. Revisar el usuario en Supabase Auth, `profiles`, `user_roles` y `user_locations`.
-3. Confirmar `is_active` y la ubicación asignada.
-4. Corregir sólo el usuario afectado y registrar la acción.
+   ```powershell
+   powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify_encrypted_backup.ps1 `
+     -ArchivePath 'C:\ruta\production-....7z' `
+     -ExpectedProjectRef krpiprwplhxrxlhzcuak -ExpectedEnvironment production
+   ```
 
-### Datos borrados o alterados por error
+7. Nunca copiar ni compartir los SQL sin cifrar fuera del equipo.
 
-1. Detener nuevas escrituras y anotar la hora exacta del incidente.
-2. Crear un backup del estado dañado antes de tocar nada.
-3. Elegir la última copia anterior al incidente.
-4. Restaurarla en un proyecto Supabase nuevo, nunca sobre producción.
-5. Validar conteos, RLS, roles, conciliaciones y acceso desde un staging de Netlify.
-6. Sólo después, cambiar la URL y clave pública del frontend y su CSP mediante una rama de emergencia.
-7. Publicar, verificar y conservar el proyecto anterior hasta cerrar el incidente.
+> Accion pendiente: sustituir el `client_id` compartido de rclone por un cliente OAuth propio de Shoronpo. rclone aviso el 21-09-2026 que el cliente compartido sera retirado durante 2026. La copia existente sigue siendo valida, pero no se debe asumir que futuras subidas funcionaran hasta completar este cambio.
 
-### Supabase está caído
+## Ensayo mensual de restauración
 
-1. Consultar el estado oficial y no ejecutar migraciones ni restauraciones durante la incidencia.
-2. Si la interrupción es breve, esperar: una restauración no corrige una caída del proveedor.
-3. Si se decide migrar de emergencia, restaurar la última copia en un proyecto nuevo y repetir la validación y el cambio de frontend.
+1. Crear un proyecto Supabase temporal y vacío. No usar staging ni producción.
+2. Desactivar cron, webhooks y conectores externos en el destino.
+3. Copiar su conexión Session pooler y ejecutar:
+
+   ```powershell
+   $secure = Read-Host 'Pega la conexion Session pooler del proyecto temporal' -AsSecureString
+   $pointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
+   try {
+     $env:SHORONPO_RESTORE_DB_URL = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($pointer)
+     powershell -NoProfile -ExecutionPolicy Bypass -File scripts/restore_supabase_test.ps1 `
+       -BackupPath 'C:\ruta\production-...' `
+       -SourceProjectRef krpiprwplhxrxlhzcuak `
+       -TargetProjectRef REFERENCIA_TEMPORAL
+   } finally {
+     [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($pointer)
+     Remove-Item Env:SHORONPO_RESTORE_DB_URL -ErrorAction SilentlyContinue
+   }
+   ```
+
+El script verifica hashes, rechaza origen y destino iguales, comprueba que `public` esté vacío y ejecuta la restauración en una sola transacción. Un error revierte el bloque completo.
+
+Después de restaurar:
+
+1. Comparar conteos de `products`, `inventory_periods`, `inventory_lines`, `inventory_reconciliations`, producciones y pedidos.
+2. Confirmar que todas las tablas de negocio tienen RLS.
+3. Ejecutar las pruebas de permisos y las pruebas automatizadas del frontend.
+4. Probar inicio de sesión, lectura por rol y rechazo de escrituras indebidas.
+5. Registrar fecha, copia usada, duración, conteos y resultado. Sólo entonces eliminar el proyecto temporal.
+
+## Procedimiento durante un incidente
+
+### Frontend caído con Supabase sano
+
+No restaurar datos. Revisar Netlify y republicar el último deploy aprobado.
+
+### Usuario sin acceso
+
+No restaurar la base. Revisar Auth, `profiles`, `user_roles`, `user_locations` e `is_active`; corregir únicamente la cuenta afectada.
+
+### Datos borrados o alterados
+
+1. Detener nuevas escrituras y registrar la hora exacta.
+2. Crear una copia del estado dañado para análisis.
+3. Elegir la última copia íntegra anterior al incidente.
+4. Restaurar en un proyecto nuevo y aislado.
+5. Validar datos, RLS, roles y frontend contra el proyecto recuperado.
+6. Cambiar las variables de producción sólo durante una ventana aprobada y conservar el proyecto anterior hasta cerrar el incidente.
+
+### Supabase caído
+
+Consultar el estado oficial y mantener el registro manual. Una restauración no corrige una caída del proveedor. Migrar sólo si la interrupción supera el RTO acordado y existe un destino independiente validado.
+
+## Responsabilidades
+
+- **Administrador de Shoronpo:** ejecuta la copia semanal, confirma el manifiesto y registra el resultado.
+- **Responsable del obrador:** activa el registro manual y confirma el impacto operativo.
+- **Responsable técnico:** realiza el ensayo mensual, valida RLS/conteos y coordina cualquier conmutación.
+- **Dirección:** autoriza una conmutación de producción o una recuperación que implique pérdida dentro del RPO.
 
 ## Prohibiciones
 
-- No restaurar encima del proyecto de producción.
-- No guardar contraseñas, cadenas de conexión, tokens o claves `service_role` en archivos del proyecto.
-- No considerar válido un backup sin `manifest.json` o con archivos vacíos.
-- No borrar el proyecto afectado hasta validar el reemplazo y cerrar formalmente el incidente.
+- Restaurar sobre staging o producción.
+- Usar una copia cuyo manifiesto o hash no valide.
+- Guardar contraseñas o conexiones en archivos, Git, chats o capturas.
+- Confundir la referencia de staging con producción.
+- Borrar el proyecto afectado antes de validar el reemplazo.
+- Considerar respaldados los objetos de Storage o secretos sólo porque existe un dump PostgreSQL.
+
+## Evidencia automatizada
+
+`tests/backup-scripts.test.ps1` fuerza y verifica: copia completa, cifrado y descifrado, corrupcion de archivo, conexion a proyecto incorrecto, fallo durante el dump, limpieza de parciales, restauracion simulada y rechazo de un destino no vacio.
+
+Evidencia real del 21-09-2026:
+
+- Backup logico de produccion `krpiprwplhxrxlhzcuak` creado y validado por hashes.
+- Archivo cifrado descifrado y contenido interno validado.
+- Archivo `.7z` y su `.sha256` copiados a `Google Drive/Shoronpo-Backups` y comparados por rclone sin diferencias.
+- El ensayo contra un proyecto Supabase temporal real sigue pendiente; las pruebas automatizadas no sustituyen ese ensayo.
