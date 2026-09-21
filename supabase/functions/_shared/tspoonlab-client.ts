@@ -55,7 +55,11 @@ export class TspoonlabClient {
     } = {},
   ) {
     if (!rememberme) {
-      throw new Error("TSPOONLAB_REMEMBERME no esta configurado");
+      throw new TspoonlabError(
+        "Sesion no configurada",
+        "AUTH_EXPIRED",
+        401,
+      );
     }
     this.#rememberme = rememberme;
     this.options = options;

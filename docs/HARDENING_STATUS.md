@@ -67,6 +67,15 @@ Estado iniciado el 17-09-2026. El rediseño visual se realizará después de cer
 - El despliegue real detectó y corrigió dos mezclas peligrosas entre bootstrap/esquema y activación operativa en `0008` y `0021`.
 - Administrador inicial creado y autorizado; variables productivas de Netlify configuradas únicamente para producción.
 - Supabase producción: `shoronpo-prod` (`krpiprwplhxrxlhzcuak`), aislado de staging.
+
+## 6. Operación, observabilidad y alertas — en validación
+
+- Stock, Producciones y Pedidos clasifican y publican el estado del conector de forma uniforme.
+- Incidentes `LIVE` y simulacros `DRILL` están separados; panel y Telegram ignoran los simulacros.
+- `AUTH_EXPIRED` conserva su clasificación y cuenta con un protocolo de renovación sin compartir secretos.
+- Telegram reclama entregas para reducir duplicados por ejecuciones concurrentes y etiqueta el entorno.
+- Treinta pruebas automáticas aprobaron, incluidas 401, 403, 429, 503, red caída y respuesta corrupta.
+- Migración `0028` y funciones desplegadas en staging; producción pendiente de promoción tras la validación visual.
 - URL principal autorizada: `https://shoronpo.netlify.app`.
 - Función `admin-users` desplegada con origen e invitaciones limitados al sitio productivo.
 - Los cron y conectores operativos permanecen desactivados hasta su fase de activación.

@@ -804,7 +804,7 @@ async function renderSystemStatus(){
   const blocks=['STOCK','PRODUCTION','ORDER'];
   const [recentResponse,alertsResponse,...blockResponses]=await Promise.all([
     supabaseClient.from('tspoon_sync_runs').select(fields).order('started_at',{ascending:false}).limit(30),
-    supabaseClient.from('system_alerts').select('alert_type,block,severity,message,detected_at').eq('status','OPEN').order('detected_at',{ascending:false}),
+    supabaseClient.from('system_alerts').select('alert_type,block,severity,message,detected_at').eq('status','OPEN').eq('scope','LIVE').order('detected_at',{ascending:false}),
     ...blocks.map(block=>supabaseClient.from('tspoon_sync_runs').select(fields).eq('block',block).order('started_at',{ascending:false}).limit(1).maybeSingle())
   ]);
   const {data:runs,error}=recentResponse;

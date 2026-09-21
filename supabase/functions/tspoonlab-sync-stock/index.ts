@@ -93,8 +93,8 @@ Deno.serve(async request => {
     await supabase.from('tspoon_sync_runs').update({
       status: 'FAILED', stores_processed: storesProcessed, records_processed: recordsProcessed, finished_at: new Date().toISOString(), error_code: code,
     }).eq('id', run.id)
-    if (code === 'AUTH_EXPIRED') {
-      await supabase.from('tspoonlab_connector_status').update({ status: 'AUTH_EXPIRED', last_checked_at: new Date().toISOString(), last_error_code: code }).eq('singleton', true)
+    if (allowedCodes.has(code)) {
+      await supabase.from('tspoonlab_connector_status').update({ status: code, last_checked_at: new Date().toISOString(), last_error_code: code }).eq('singleton', true)
     }
     return json({ ok: false, status: code, runId: run.id }, code === 'AUTH_EXPIRED' ? 401 : 503)
   }

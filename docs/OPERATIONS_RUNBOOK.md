@@ -21,6 +21,8 @@ Estado: integración validada el 16-09-2026. Zona horaria operativa: `Europe/Mad
 6. Confirmar una nueva ejecución `SUCCEEDED`. El sistema cerrará el incidente y Telegram enviará un único mensaje de recuperación.
 7. Registrar quién intervino, causa, hora de recuperación y cambio realizado.
 
+Las alertas reales tienen alcance `LIVE`. Los registros `DRILL` pertenecen a simulacros y no se muestran en el panel ni se envían por Telegram. Nunca convertir manualmente un simulacro en `LIVE`.
+
 ## Sesión de tSpoonLab expirada
 
 La sesión expirada no altera ni elimina datos existentes: detiene las nuevas importaciones de forma cerrada.
@@ -31,6 +33,8 @@ La sesión expirada no altera ni elimina datos existentes: detiene las nuevas im
 4. Ejecutar `tspoonlab-health` y confirmar `HEALTHY`.
 5. Ejecutar una sincronización manual del bloque afectado con una clave de idempotencia nueva.
 6. Confirmar `SUCCEEDED`, datos recientes en el panel y aviso de recuperación en Telegram.
+
+Actualizar siempre el proyecto correcto: staging y producción usan secretos independientes. Los mensajes Telegram incluyen el entorno para evitar actuar sobre la base equivocada.
 
 ## Si Supabase o el conector no están disponibles
 

@@ -103,6 +103,15 @@ Deno.serve(async (req) => {
         throw new TspoonlabError("Demasiados pedidos", "INVALID_RESPONSE");
       }
     } while (hasMore);
+    const checkedAt = new Date().toISOString();
+    const { error: connectorError } = await db.from("tspoonlab_connector_status").update({
+      status: "HEALTHY",
+      last_checked_at: checkedAt,
+      last_success_at: checkedAt,
+      last_error_code: null,
+      updated_at: checkedAt,
+    }).eq("singleton", true);
+    if (connectorError) throw new Error("CONNECTOR_STATUS_WRITE_FAILED");
     await db.from("tspoon_sync_runs").update({
       status: "SUCCEEDED",
       records_processed: processed,
@@ -121,14 +130,18 @@ Deno.serve(async (req) => {
         : error instanceof Error
         ? error.message
         : "SYNC_FAILED",
-      code = [
+      connectorCodes = [
           "AUTH_EXPIRED",
           "FORBIDDEN",
           "RATE_LIMITED",
           "UPSTREAM_ERROR",
           "NETWORK_ERROR",
           "INVALID_RESPONSE",
+        ],
+      code = [
+          ...connectorCodes,
           "ORDER_REPLACE_FAILED",
+          "CONNECTOR_STATUS_WRITE_FAILED",
         ].includes(raw)
         ? raw
         : "SYNC_FAILED";
@@ -143,6 +156,15 @@ Deno.serve(async (req) => {
       finished_at: new Date().toISOString(),
       error_code: code,
     }).eq("id", run.id);
+    if (connectorCodes.includes(code)) {
+      const checkedAt = new Date().toISOString();
+      await db.from("tspoonlab_connector_status").update({
+        status: code,
+        last_checked_at: checkedAt,
+        last_error_code: code,
+        updated_at: checkedAt,
+      }).eq("singleton", true);
+    }
     return json(
       { ok: false, status: code, runId: run.id },
       code === "AUTH_EXPIRED" ? 401 : 503,

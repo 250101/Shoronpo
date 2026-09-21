@@ -26,6 +26,7 @@ type Alert = {
   message:string
   detected_at:string
   resolved_at:string|null
+  telegram_notified_at:string|null
 }
 
 function madridTime(value:string|null){
@@ -35,10 +36,11 @@ function madridTime(value:string|null){
   }).format(new Date(value))
 }
 
-function alertText(alert:Alert,resolved=false){
+function alertText(alert:Alert,resolved=false,environment='production'){
   const subject=alert.block??'CONECTOR TSPOONLAB'
-  if(resolved) return `✅ Shoronpo recuperado\n${subject}\nEl incidente fue resuelto.\nRecuperado: ${madridTime(alert.resolved_at)}`
-  return `${alert.severity==='CRITICAL'?'🚨':'⚠️'} Shoronpo — ${alert.severity==='CRITICAL'?'Alerta crítica':'Advertencia'}\n${subject}\n${alert.message}\nDetectado: ${madridTime(alert.detected_at)}`
+  const prefix=`[${environment.toUpperCase()}]`
+  if(resolved) return `${prefix} ✅ Shoronpo recuperado\n${subject}\nEl incidente fue resuelto.\nRecuperado: ${madridTime(alert.resolved_at)}`
+  return `${prefix} ${alert.severity==='CRITICAL'?'🚨':'⚠️'} Shoronpo — ${alert.severity==='CRITICAL'?'Alerta crítica':'Advertencia'}\n${subject}\n${alert.message}\nDetectado: ${madridTime(alert.detected_at)}`
 }
 
 async function sendTelegram(token:string,chatId:string,text:string){
@@ -60,14 +62,15 @@ Deno.serve(async request=>{
 
   const token=Deno.env.get('TELEGRAM_BOT_TOKEN')??''
   const chatId=Deno.env.get('TELEGRAM_CHAT_ID')??''
+  const environment=Deno.env.get('SHORONPO_ENVIRONMENT')??'production'
   if(!token||!chatId) return json({error:'TELEGRAM_NOT_CONFIGURED'},503)
 
   const db=createClient(Deno.env.get('SUPABASE_URL')!,Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,{
     auth:{persistSession:false,autoRefreshToken:false},
   })
   const [opened,resolved]=await Promise.all([
-    db.from('system_alerts').select('id,alert_type,block,severity,status,message,detected_at,resolved_at').eq('status','OPEN').is('telegram_notified_at',null).order('detected_at').limit(10),
-    db.from('system_alerts').select('id,alert_type,block,severity,status,message,detected_at,resolved_at').eq('status','RESOLVED').not('telegram_notified_at','is',null).is('telegram_resolution_notified_at',null).order('resolved_at').limit(10),
+    db.from('system_alerts').select('id,alert_type,block,severity,status,message,detected_at,resolved_at,telegram_notified_at').eq('scope','LIVE').eq('status','OPEN').is('telegram_notified_at',null).order('detected_at').limit(10),
+    db.from('system_alerts').select('id,alert_type,block,severity,status,message,detected_at,resolved_at,telegram_notified_at').eq('scope','LIVE').eq('status','RESOLVED').not('telegram_notified_at','is',null).is('telegram_resolution_notified_at',null).order('resolved_at').limit(10),
   ])
   if(opened.error||resolved.error) return json({
     error:'ALERT_READ_FAILED',
@@ -75,21 +78,37 @@ Deno.serve(async request=>{
   },500)
 
   let sent=0
-  for(const alert of (opened.data??[]) as Alert[]){
+  const deliver=async(alert:Alert,resolution:boolean)=>{
+    const claimToken=crypto.randomUUID()
+    const staleBefore=new Date(Date.now()-10*60*1000).toISOString()
+    const claim=await db.from('system_alerts')
+      .update({telegram_claim_token:claimToken,telegram_claimed_at:new Date().toISOString()})
+      .eq('id',alert.id).eq('scope','LIVE')
+      .or(`telegram_claimed_at.is.null,telegram_claimed_at.lt.${staleBefore}`)
+      .select('id').maybeSingle()
+    if(claim.error) throw new Error('DELIVERY_CLAIM_FAILED')
+    if(!claim.data) return false
     try{
-      await sendTelegram(token,chatId,alertText(alert))
-      const {error}=await db.from('system_alerts').update({telegram_notified_at:new Date().toISOString()}).eq('id',alert.id).is('telegram_notified_at',null)
+      await sendTelegram(token,chatId,alertText(alert,resolution,environment))
+      const values=resolution
+        ? {telegram_resolution_notified_at:new Date().toISOString(),telegram_claim_token:null,telegram_claimed_at:null}
+        : {telegram_notified_at:new Date().toISOString(),telegram_claim_token:null,telegram_claimed_at:null}
+      const {error}=await db.from('system_alerts').update(values).eq('id',alert.id).eq('telegram_claim_token',claimToken)
       if(error) throw new Error('DELIVERY_STATE_WRITE_FAILED')
-      sent+=1
-    }catch(error){return json({ok:false,sent,error:error instanceof Error?error.message:'TELEGRAM_FAILED'},502)}
+      return true
+    }catch(error){
+      await db.from('system_alerts').update({telegram_claim_token:null,telegram_claimed_at:null}).eq('id',alert.id).eq('telegram_claim_token',claimToken)
+      throw error
+    }
+  }
+
+  for(const alert of (opened.data??[]) as Alert[]){
+    try{if(await deliver(alert,false)) sent+=1}
+    catch(error){return json({ok:false,sent,error:error instanceof Error?error.message:'TELEGRAM_FAILED'},502)}
   }
   for(const alert of (resolved.data??[]) as Alert[]){
-    try{
-      await sendTelegram(token,chatId,alertText(alert,true))
-      const {error}=await db.from('system_alerts').update({telegram_resolution_notified_at:new Date().toISOString()}).eq('id',alert.id).is('telegram_resolution_notified_at',null)
-      if(error) throw new Error('DELIVERY_STATE_WRITE_FAILED')
-      sent+=1
-    }catch(error){return json({ok:false,sent,error:error instanceof Error?error.message:'TELEGRAM_FAILED'},502)}
+    try{if(await deliver(alert,true)) sent+=1}
+    catch(error){return json({ok:false,sent,error:error instanceof Error?error.message:'TELEGRAM_FAILED'},502)}
   }
   return json({ok:true,sent})
 })

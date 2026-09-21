@@ -36,13 +36,18 @@ Deno.serve(async request => {
         processed++
       }
     }
+    const checkedAt=new Date().toISOString()
+    const {error:connectorError}=await db.from('tspoonlab_connector_status').update({status:'HEALTHY',last_checked_at:checkedAt,last_success_at:checkedAt,last_error_code:null,updated_at:checkedAt}).eq('singleton',true)
+    if(connectorError) throw new Error('CONNECTOR_STATUS_WRITE_FAILED')
     await db.from('tspoon_sync_runs').update({status:'SUCCEEDED',records_processed:processed,finished_at:new Date().toISOString()}).eq('id',run.id)
     return json({ok:true,runId:run.id,productionsProcessed:processed})
   }catch(error){
     const raw=error instanceof TspoonlabError?error.code:error instanceof Error?error.message:'SYNC_FAILED'
-    const code=['AUTH_EXPIRED','FORBIDDEN','RATE_LIMITED','UPSTREAM_ERROR','NETWORK_ERROR','INVALID_RESPONSE','PRODUCTION_REPLACE_FAILED'].includes(raw)?raw:'SYNC_FAILED'
+    const connectorCodes=['AUTH_EXPIRED','FORBIDDEN','RATE_LIMITED','UPSTREAM_ERROR','NETWORK_ERROR','INVALID_RESPONSE']
+    const code=[...connectorCodes,'PRODUCTION_REPLACE_FAILED','CONNECTOR_STATUS_WRITE_FAILED'].includes(raw)?raw:'SYNC_FAILED'
     await db.from('tspoon_sync_errors').insert({run_id:run.id,code,message:code})
     await db.from('tspoon_sync_runs').update({status:'FAILED',records_processed:processed,finished_at:new Date().toISOString(),error_code:code}).eq('id',run.id)
+    if(connectorCodes.includes(code)) await db.from('tspoonlab_connector_status').update({status:code,last_checked_at:new Date().toISOString(),last_error_code:code,updated_at:new Date().toISOString()}).eq('singleton',true)
     return json({ok:false,status:code,runId:run.id},code==='AUTH_EXPIRED'?401:503)
   }
 })
