@@ -130,6 +130,7 @@ test("la administración de usuarios sólo se muestra a administradores e invoca
   assert.match(script, /adminUsersRequest\('PATCH',payload\)/);
   assert.match(script, /action:'set-role'/);
   assert.match(script, /action:'set-active'/);
+  assert.match(script, /Restaurante \(bloqueado\)/);
   assert.match(adminUsers, /adminClient\.auth\.admin\s*\.listUsers/);
   assert.match(adminUsers, /userClient\.rpc\("set_user_role"/);
   assert.match(adminUsers, /userId === claimsResult\.claims\.sub/);

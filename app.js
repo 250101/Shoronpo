@@ -1522,8 +1522,10 @@ function renderAdminUsers(users){
   const target=document.getElementById('adminUsersList');
   if(!users.length){target.innerHTML='<div class="empty">No hay usuarios registrados.</div>';return;}
   target.innerHTML=`<div class="tbl-wrap"><table class="atbl admin-users-table"><thead><tr><th>Usuario</th><th>Rol</th><th>Estado</th><th>Acción</th></tr></thead><tbody>${users.map(user=>{
-    const currentRole=user.roles.find(role=>['ADMINISTRADOR','DIRECCION','OBRADOR'].includes(role))||'';
-    const options=[['OBRADOR','Obrador'],['DIRECCION','Dirección'],['ADMINISTRADOR','Administrador']]
+    const currentRole=user.roles[0]||'';
+    const legacyOption=currentRole&&!['ADMINISTRADOR','DIRECCION','OBRADOR'].includes(currentRole)
+      ?`<option value="${escapeHtml(currentRole)}" selected disabled>${escapeHtml(currentRole==='RESTAURANTE'?'Restaurante (bloqueado)':currentRole+' (no admitido)')}</option>`:'';
+    const options=legacyOption+[['OBRADOR','Obrador'],['DIRECCION','Dirección'],['ADMINISTRADOR','Administrador']]
       .map(([value,label])=>`<option value="${value}"${value===currentRole?' selected':''}>${label}</option>`).join('');
     return `<tr><td><strong>${escapeHtml(user.displayName)}</strong><div class="admin-user-email">${escapeHtml(user.email)}</div>${user.isSelf?'<div class="admin-user-email">Tu cuenta</div>':''}</td>
       <td><select data-admin-role data-user-id="${actionValue(user.id)}"${user.isSelf?' disabled':''}>${options}</select></td>
