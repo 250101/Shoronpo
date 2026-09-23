@@ -135,7 +135,7 @@ function renderHistOnly(){
 }
 
 function renderNavVisibility(){
-  if(canViewInventory()&&historico.quincenas&&historico.quincenas.length>0){
+  if(canViewInventory()){
     document.getElementById('mainNav').style.display='flex';
   }
 }
@@ -846,7 +846,10 @@ function showView(id,tab){
   if(id==='rankings') renderRankings();
   if(id==='gestion') renderGestion();
   if(id==='comparar') renderCompararSelector();
-  if(id==='sistema') renderSystemStatus();
+  if(id==='sistema'){
+    renderSystemStatus();
+    if(hasRole('ADMINISTRADOR')) loadAdminUsers();
+  }
 }
 
 // ── Render all ────────────────────────────────────────────────
@@ -1491,6 +1494,71 @@ function adminUserMessage(message,type=''){
   element.className=`admin-user-message ${type}`.trim();
 }
 
+async function adminUsersRequest(method,body){
+  if(!hasRole('ADMINISTRADOR')) throw new Error('FORBIDDEN');
+  const {data:assurance,error:assuranceError}=await supabaseClient.auth.mfa.getAuthenticatorAssuranceLevel();
+  if(assuranceError) throw assuranceError;
+  if(assurance.currentLevel!=='aal2'){
+    await requireAdminMfa({roles:authenticatedUser.roles});
+    throw new Error('MFA_ADMIN_REQUIRED');
+  }
+  const {data:sessionData,error:sessionError}=await supabaseClient.auth.getSession();
+  if(sessionError||!sessionData.session) throw new Error('SESSION_EXPIRED');
+  const response=await fetch(`${SUPABASE_URL}/functions/v1/admin-users`,{
+    method,
+    headers:{
+      apikey:SUPABASE_PUBLISHABLE_KEY,
+      Authorization:`Bearer ${sessionData.session.access_token}`,
+      ...(body?{'content-type':'application/json'}:{})
+    },
+    ...(body?{body:JSON.stringify(body)}:{})
+  });
+  const data=await response.json().catch(()=>({}));
+  if(!response.ok||!data?.ok) throw new Error(data?.error||`HTTP_${response.status}`);
+  return data;
+}
+
+function renderAdminUsers(users){
+  const target=document.getElementById('adminUsersList');
+  if(!users.length){target.innerHTML='<div class="empty">No hay usuarios registrados.</div>';return;}
+  target.innerHTML=`<div class="tbl-wrap"><table class="atbl admin-users-table"><thead><tr><th>Usuario</th><th>Rol</th><th>Estado</th><th>Acción</th></tr></thead><tbody>${users.map(user=>{
+    const currentRole=user.roles.find(role=>['ADMINISTRADOR','DIRECCION','OBRADOR'].includes(role))||'';
+    const options=[['OBRADOR','Obrador'],['DIRECCION','Dirección'],['ADMINISTRADOR','Administrador']]
+      .map(([value,label])=>`<option value="${value}"${value===currentRole?' selected':''}>${label}</option>`).join('');
+    return `<tr><td><strong>${escapeHtml(user.displayName)}</strong><div class="admin-user-email">${escapeHtml(user.email)}</div>${user.isSelf?'<div class="admin-user-email">Tu cuenta</div>':''}</td>
+      <td><select data-admin-role data-user-id="${actionValue(user.id)}"${user.isSelf?' disabled':''}>${options}</select></td>
+      <td><span class="admin-user-state">${user.isActive?'Activo':'Inactivo'}</span></td>
+      <td><button class="admin-user-action${user.isActive?' danger':''}" data-action="set-user-active" data-user-id="${actionValue(user.id)}" data-active="${user.isActive?'false':'true'}"${user.isSelf?' disabled':''}>${user.isActive?'Desactivar':'Activar'}</button></td></tr>`;
+  }).join('')}</tbody></table></div>`;
+}
+
+async function loadAdminUsers(){
+  const target=document.getElementById('adminUsersList');
+  target.innerHTML='<div class="empty"><span class="spinner"></span> Consultando usuarios…</div>';
+  try{
+    const data=await adminUsersRequest('GET');
+    renderAdminUsers(data.users||[]);
+  }catch(error){
+    const message=error?.message==='MFA_ADMIN_REQUIRED'?'Verificá Microsoft Authenticator y volvé a abrir Sistema.':'No se pudo consultar la lista de usuarios.';
+    target.innerHTML=`<div class="empty">${escapeHtml(message)}</div>`;
+  }
+}
+
+async function updateAdminUser(payload,control){
+  control.disabled=true;
+  adminUserMessage('Guardando cambio…');
+  try{
+    await adminUsersRequest('PATCH',payload);
+    adminUserMessage('Usuario actualizado correctamente.','ok');
+    await loadAdminUsers();
+  }catch(error){
+    const messages={INVALID_TARGET:'No podés modificar tu propia cuenta.',MFA_ADMIN_REQUIRED:'Verificá Microsoft Authenticator y reintentá.',UPDATE_FAILED:'No se pudo aplicar el cambio.',SESSION_EXPIRED:'La sesión venció. Volvé a ingresar.'};
+    adminUserMessage(messages[error?.message]||'No se pudo actualizar el usuario.','err');
+    control.disabled=false;
+    await loadAdminUsers();
+  }
+}
+
 async function inviteAdminUser(event){
   event.preventDefault();
   const form=event.currentTarget;
@@ -1499,33 +1567,14 @@ async function inviteAdminUser(event){
   const button=document.getElementById('adminUserSubmit');
   button.disabled=true;button.textContent='Enviando…';
   try{
-    const {data:assurance,error:assuranceError}=await supabaseClient.auth.mfa.getAuthenticatorAssuranceLevel();
-    if(assuranceError) throw assuranceError;
-    if(assurance.currentLevel!=='aal2'){
-      await requireAdminMfa({roles:authenticatedUser.roles});
-      adminUserMessage('Verificá Microsoft Authenticator y luego volvé a enviar la invitación.','err');
-      return;
-    }
-    const {data:sessionData,error:sessionError}=await supabaseClient.auth.getSession();
-    if(sessionError||!sessionData.session) throw new Error('SESSION_EXPIRED');
-    const response=await fetch(`${SUPABASE_URL}/functions/v1/admin-users`,{
-      method:'POST',
-      headers:{
-        apikey:SUPABASE_PUBLISHABLE_KEY,
-        Authorization:`Bearer ${sessionData.session.access_token}`,
-        'content-type':'application/json'
-      },
-      body:JSON.stringify({
-        displayName:document.getElementById('adminUserName').value.trim(),
-        email:document.getElementById('adminUserEmail').value.trim().toLowerCase(),
-        role:document.getElementById('adminUserRole').value
-      })
+    await adminUsersRequest('POST',{
+      displayName:document.getElementById('adminUserName').value.trim(),
+      email:document.getElementById('adminUserEmail').value.trim().toLowerCase(),
+      role:document.getElementById('adminUserRole').value
     });
-    const data=await response.json().catch(()=>({}));
-    if(!response.ok) throw new Error(data?.error||`HTTP_${response.status}`);
-    if(!data?.ok) throw new Error(data?.error||'INVITE_FAILED');
     form.reset();
     adminUserMessage('Invitación enviada y rol asignado correctamente.','ok');
+    await loadAdminUsers();
   }catch(error){
     const messages={
       MFA_ADMIN_REQUIRED:'Volvé a verificar Microsoft Authenticator para administrar usuarios.',
@@ -1797,6 +1846,8 @@ document.addEventListener('click',event=>{
   else if(action==='refresh-history') fetchHistorico().then(()=>{renderGestion();showNotice('Histórico actualizado.','ok')}).catch(error=>showNotice(error.message,'err'));
   else if(action==='compare') ejecutarComparacion();
   else if(action==='refresh-system') renderSystemStatus();
+  else if(action==='refresh-admin-users') loadAdminUsers();
+  else if(action==='set-user-active') updateAdminUser({action:'set-active',userId:decodeActionValue(control.dataset.userId),isActive:control.dataset.active==='true'},control);
   else if(action==='close-panel') closePanel();
   else if(action==='open-panel') openPanel(product);
   else if(action==='panel-nav') panelNav(product,Number(control.dataset.direction));
@@ -1809,5 +1860,9 @@ document.getElementById('semanaSelector').addEventListener('change',event=>cambi
 document.getElementById('detailSearch').addEventListener('input',event=>searchDetail(event.target.value));
 document.getElementById('productSearch').addEventListener('input',event=>searchProductos(event.target.value));
 document.getElementById('adminUserForm').addEventListener('submit',inviteAdminUser);
+document.getElementById('adminUsersList').addEventListener('change',event=>{
+  const control=event.target.closest('[data-admin-role]');
+  if(control) updateAdminUser({action:'set-role',userId:decodeActionValue(control.dataset.userId),role:control.value},control);
+});
 
 initializeApp();

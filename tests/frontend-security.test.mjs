@@ -19,6 +19,10 @@ const systemAlertsMigration = readFileSync(
   new URL("../supabase/migrations/0021_system_alerts.sql", import.meta.url),
   "utf8",
 );
+const adminUserManagement = readFileSync(
+  new URL("../supabase/migrations/0029_admin_user_management.sql", import.meta.url),
+  "utf8",
+);
 
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>'"]/g, (char) => ({
@@ -121,6 +125,28 @@ test("la administración de usuarios sólo se muestra a administradores e invoca
   assert.match(supabaseConfig, /\[functions\.admin-users\]\s+verify_jwt = false/);
   assert.match(adminUsers, /userClient\.auth\s*\.getClaims\(token\)/);
   assert.match(adminUsers, /userClient\.rpc\(\s*"is_admin_aal2"/);
+  assert.match(html, /id="adminUsersList"/);
+  assert.match(script, /adminUsersRequest\('GET'\)/);
+  assert.match(script, /adminUsersRequest\('PATCH',payload\)/);
+  assert.match(script, /action:'set-role'/);
+  assert.match(script, /action:'set-active'/);
+  assert.match(adminUsers, /adminClient\.auth\.admin\s*\.listUsers/);
+  assert.match(adminUsers, /userClient\.rpc\("set_user_role"/);
+  assert.match(adminUsers, /userId === claimsResult\.claims\.sub/);
+});
+
+test("el cambio de rol es atomico, exige MFA y no permite autoedicion", () => {
+  assert.match(adminUserManagement, /create or replace function public\.set_user_role/);
+  assert.match(adminUserManagement, /public\.is_admin_aal2\(\)/);
+  assert.match(adminUserManagement, /p_user_id = auth\.uid\(\)/);
+  assert.match(adminUserManagement, /delete from public\.user_roles where user_id = p_user_id/);
+  assert.match(adminUserManagement, /insert into public\.user_roles/);
+  assert.doesNotMatch(adminUserManagement, /'ADMINISTRADOR', 'DIRECCION', 'OBRADOR', 'RESTAURANTE'/);
+});
+
+test("Sistema sigue accesible sin semanas cargadas", () => {
+  assert.match(script, /function renderNavVisibility\(\)\{\s*if\(canViewInventory\(\)\)\{/);
+  assert.doesNotMatch(script, /if\(canViewInventory\(\)&&historico\.quincenas&&historico\.quincenas\.length>0\)/);
 });
 
 test("las invitaciones obligan a establecer contraseña antes de activar la aplicación", () => {
