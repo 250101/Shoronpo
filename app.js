@@ -2,6 +2,7 @@
 let currentData=[], historico={quincenas:[],productos:[]}, conciliaciones={}, currentSemana=null;
 let activeFilter='all', sortCol='impacto', sortAsc=false, searchTerm='';
 let gaugeInst=null, histInst=null, histOnlyInst=null, scatterInst=null, panelChartInst=null;
+let currentSnapshotRunId=null, currentSnapshotCapturedAt=null;
 
 // ── Conexión ─────────────────────────────────────────────────
 async function retryConnection(){
@@ -172,7 +173,7 @@ function renderGestion(){
 // ── Reset dashboard ───────────────────────────────────────────
 function resetDashboard(){
   if(!confirm('¿Seguro que querés limpiar el inventario actual?\nEl histórico de la base de datos no se borra.')) return;
-  currentData=[];
+  currentData=[];currentSnapshotRunId=null;currentSnapshotCapturedAt=null;
   activeFilter='all'; sortCol='impacto'; sortAsc=false; searchTerm='';
   document.getElementById('landingSection').style.display='block';
   document.getElementById('healthWrap').style.display='none';
@@ -536,8 +537,11 @@ function renderDetail(data){
     const hist=prodHist[d.producto]||[];
     const histBadge=hist.length>0?`<span class="pill p-blue" style="cursor:pointer" data-action="open-panel" data-product="${actionValue(d.producto)}">📊 ${hist.length} reg.</span>`:'<span style="color:var(--text3);font-size:11px">—</span>';
     const concBadge=d.estado!=='COINCIDE'?badgeConc(d.producto,'actual'):'<span style="color:var(--text3);font-size:11px">—</span>';
+    const realCell=currentSnapshotRunId&&!currentSemana
+      ?`<input class="count-input" type="number" step="any" inputmode="decimal" value="${d.counted?d.cantReal:''}" aria-label="Conteo físico de ${escapeHtml(d.producto)}" data-action="set-physical-count" data-product="${actionValue(d.producto)}">`
+      :d.cantReal.toFixed(2);
     return `<tr><td style="font-weight:600">${escapeHtml(d.producto)}</td><td>${escapeHtml(d.familia)}</td><td>${escapeHtml(d.unidad)}</td>
-      <td>${d.cantTeo.toFixed(2)}</td><td>${d.cantReal.toFixed(2)}</td>
+      <td>${d.cantTeo.toFixed(2)}</td><td>${realCell}</td>
       <td><span class="dot ${dot}"></span>${pct}</td>
       <td style="font-weight:600">€${d.impacto.toFixed(2)}</td>
       <td><span class="pill ${pill}">${lab}</span></td>
@@ -936,6 +940,8 @@ function renderAll(){
 async function cerrarQuincena(){
   if(!canManageInventory()){showNotice('Tu rol tiene acceso de solo lectura.','err');return;}
   if(!currentData.length){showNotice('Primero cargá un export.','err');return;}
+  const pending=currentData.filter(item=>!item.counted);
+  if(currentSnapshotRunId&&pending.length){showNotice(`Faltan ${pending.length} conteos físicos.`,'err');return;}
   const q=prompt('Nombre de la semana (ej: Q1 Jul 2026):');
   if(!q) return;
   if(!confirm(`¿Guardás la semana "${q}" en la base de datos?`)) return;
@@ -949,13 +955,15 @@ async function cerrarQuincena(){
     const lines=currentData.map(item=>({product_name:item.producto,theoretical_quantity:item.cantTeo,
       actual_quantity:item.cantReal,theoretical_cost:item.costeTeo,actual_cost:item.costeReal}));
     const {error}=await supabaseClient.rpc('close_inventory_period',{
-      p_location_id:location.id,p_label:q,p_recorded_at:new Date().toISOString(),p_lines:lines
+      p_location_id:location.id,p_label:q,p_recorded_at:new Date().toISOString(),p_lines:lines,
+      p_snapshot_run_id:currentSnapshotRunId
     });
     if(error) throw error;
     fill.style.width='100%';
     showNotice(`Semana "${q}" guardada correctamente.`,'ok');
     document.getElementById('qbadge').textContent=q;document.getElementById('qbadge').style.display='block';
     currentSemana=q;
+    currentSnapshotRunId=null;currentSnapshotCapturedAt=null;
     await fetchHistorico();
     actualizarSelectorSemana();
     const sel=document.getElementById('semanaSelector');
@@ -971,12 +979,65 @@ async function processFile(file){
   try{
     const data=await parseXLSX(file);
     if(!data.length){showNotice('No se encontraron productos.','err');return;}
+    if(currentSnapshotRunId){
+      const imported=new Map(data.map(item=>[item.producto.trim().toLowerCase(),item]));
+      const missing=[];
+      currentData.forEach(item=>{
+        const match=imported.get(item.producto.trim().toLowerCase());
+        if(!match){missing.push(item.producto);return;}
+        item.cantReal=match.cantReal;item.counted=true;
+        recalculateCurrentLine(item);
+      });
+      renderAll();
+      showNotice(`${currentData.length-missing.length} conteos importados; ${missing.length} pendientes.`,missing.length?'inf':'ok');
+      return;
+    }
     currentData=data;currentSemana=null;activeFilter='all';sortCol='impacto';sortAsc=false;searchTerm='';
     document.querySelectorAll('.fbtn').forEach(b=>b.className='fbtn');
     const allBtn=document.querySelector('.fbtn');if(allBtn) allBtn.classList.add('f-all');
     renderAll();
     showNotice(`${data.length} productos cargados.`,'ok');
   }catch(err){showNotice('Error: '+err,'err');}
+}
+
+function recalculateCurrentLine(item){
+  item.desv=item.cantReal-item.cantTeo;
+  item.pct=Math.abs(item.cantTeo)>0.000001?item.desv/Math.abs(item.cantTeo):0;
+  item.costeReal=Math.abs(item.cantTeo)>0.000001?item.cantReal*(item.costeTeo/item.cantTeo):0;
+  item.impacto=calcularImpactoDesviacion(item.cantTeo,item.cantReal,item.desv,item.costeTeo,item.costeReal);
+  item.estado=getEstado(item.pct);
+}
+
+async function cargarNuevoInventario(){
+  if(!canManageInventory()){showNotice('Tu rol no puede crear inventarios.','err');return;}
+  const location=authenticatedUser?.locations?.find(item=>item.type==='OBRADOR'&&item.is_active);
+  if(!location){showNotice('Tu usuario no tiene un obrador activo asignado.','err');return;}
+  showLoading('Cargando el último stock válido de tSpoonLab...');
+  try{
+    const {data,error}=await supabaseClient.rpc('get_latest_inventory_snapshot',{p_location_id:location.id});
+    if(error) throw error;
+    if(!data?.length) throw new Error('El último snapshot no contiene productos activos asociados.');
+    currentSnapshotRunId=data[0].snapshot_run_id;currentSnapshotCapturedAt=data[0].captured_at;
+    currentSemana=null;activeFilter='all';sortCol='producto';sortAsc=true;searchTerm='';
+    currentData=data.map(item=>({
+      familia:item.family||'Sin categoría',producto:item.product_name,unidad:item.unit||'',
+      cantTeo:Number(item.theoretical_quantity)||0,cantReal:0,counted:false,desv:0,pct:0,
+      costeTeo:Number(item.theoretical_cost)||0,costeReal:0,impacto:0,estado:'COINCIDE'
+    }));
+    renderAll();
+    showNotice(`${currentData.length} productos precargados desde ${new Date(currentSnapshotCapturedAt).toLocaleString('es-ES',{timeZone:'Europe/Madrid'})}. Introducí o importá el conteo físico.`,'ok');
+  }catch(error){showNotice('No se pudo iniciar el inventario: '+error.message,'err');}
+  finally{hideLoading();}
+}
+
+function setPhysicalCount(product,value){
+  const item=currentData.find(row=>row.producto===product);
+  if(!item) return;
+  const parsed=Number(value);
+  item.counted=value!==''&&Number.isFinite(parsed);
+  item.cantReal=item.counted?parsed:0;
+  recalculateCurrentLine(item);
+  renderAll();
 }
 
 document.getElementById('fileInput').addEventListener('change',e=>{if(e.target.files[0])processFile(e.target.files[0]);});
@@ -1840,6 +1901,7 @@ document.addEventListener('click',event=>{
   else if(action==='cancel-mfa') logout();
   else if(action==='show-view') showView(control.dataset.view,control);
   else if(action==='choose-file') document.getElementById('fileInput').click();
+  else if(action==='new-inventory') cargarNuevoInventario();
   else if(action==='history-scroll') histScroll(Number(control.dataset.direction));
   else if(action==='reset-dashboard') resetDashboard();
   else if(action==='close-week') cerrarQuincena();
@@ -1856,6 +1918,11 @@ document.addEventListener('click',event=>{
   else if(action==='open-reconciliation') abrirConciliacion(product,week);
   else if(action==='delete-explanation') borrarExplicacion(product,week,Number(control.dataset.index));
   else if(action==='save-explanation') guardarExplicacion(product,week);
+});
+
+document.addEventListener('change',event=>{
+  const control=event.target.closest('[data-action="set-physical-count"]');
+  if(control) setPhysicalCount(decodeActionValue(control.dataset.product),control.value);
 });
 
 document.getElementById('semanaSelector').addEventListener('change',event=>cambiarSemanaVista(event.target.value));

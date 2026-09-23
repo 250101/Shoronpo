@@ -266,3 +266,5 @@ input[type=file]{display:none}
 .conc-pendiente{background:#fff0f0;color:#8b1a1a;border:1px solid #fdc5c5}
 .conc-parcial{background:#fffbec;color:#7a4f00;border:1px solid #fde8a0}
 .conc-conciliada{background:#edfff4;color:#14532d;border:1px solid #b6f0cf}
+.count-input{width:92px;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font:inherit}
+.count-input:focus{outline:2px solid var(--blue);outline-offset:1px}
