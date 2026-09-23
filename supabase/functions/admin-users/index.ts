@@ -95,8 +95,8 @@ Deno.serve(async (request) => {
     const userIds = users.map((user) => user.id);
     const [{ data: profiles, error: profilesError }, { data: assignments, error: rolesError }] =
       await Promise.all([
-        adminClient.from("profiles").select("user_id,display_name,is_active").in("user_id", userIds),
-        adminClient.from("user_roles").select("user_id,roles!inner(code)").in("user_id", userIds),
+        userClient.from("profiles").select("user_id,display_name,is_active").in("user_id", userIds),
+        userClient.from("user_roles").select("user_id,roles!inner(code)").in("user_id", userIds),
       ]);
     if (profilesError || rolesError) {
       console.error("ADMIN_USERS_DATA_FAILED", profilesError?.code ?? rolesError?.code ?? "unknown");
