@@ -148,7 +148,8 @@ Deno.serve(async (request) => {
       return response({ ok: true }, 200, origin);
     }
     if (payload.action === "set-active" && typeof payload.isActive === "boolean") {
-      const { error } = await userClient.from("profiles").update({ is_active: payload.isActive }).eq("user_id", userId);
+      const { error } = await userClient.from("profiles").update({ is_active: payload.isActive })
+        .eq("user_id", userId).select("user_id").single();
       if (error) {
         console.error("ADMIN_STATUS_UPDATE_FAILED", error.code ?? "unknown");
         return response({ error: "UPDATE_FAILED" }, 409, origin);
