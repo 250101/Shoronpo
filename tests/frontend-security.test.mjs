@@ -209,6 +209,8 @@ test("la carga inicial no oculta fallos del histórico y permite reintentar", ()
 });
 
 test("Investigación usa la semana real y construye el historial antes del formulario", () => {
+  assert.match(html, /<div id="panelBody"><\/div>/);
+  assert.doesNotMatch(html, /<tbody id="panelBody">/);
   assert.match(script, /const reconciliationWeek=currentSemana\|\|'actual';/);
   assert.match(script, /badgeConc\(d\.producto,reconciliationWeek\)/);
   assert.match(script, /if\(!source\) return;\s*[\s\S]*?openPanel\(producto\);/);
