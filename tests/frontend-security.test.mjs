@@ -202,6 +202,20 @@ test("Supabase es la única fuente persistente de conciliaciones", () => {
   assert.match(script, /conciliaciones=\{\}/);
 });
 
+test("la carga inicial no oculta fallos del histórico y permite reintentar", () => {
+  assert.match(script, /await fetchHistorico\(\);\s*dot\.className='conn-dot ok'/);
+  assert.match(script, /reconnectButton\.style\.display='inline-flex'/);
+  assert.match(script, /catch\(e\)\{\s*console\.warn\('fetchHistorico:',e\);\s*throw e;/);
+});
+
+test("Investigación usa la semana real y construye el historial antes del formulario", () => {
+  assert.match(script, /const reconciliationWeek=currentSemana\|\|'actual';/);
+  assert.match(script, /badgeConc\(d\.producto,reconciliationWeek\)/);
+  assert.match(script, /if\(!source\) return;\s*[\s\S]*?openPanel\(producto\);/);
+  assert.match(script, /const prod=historico\.productos\.find\(p=>p\.producto===producto&&String\(p\.quincena\)===String\(realSemana\)\)/);
+  assert.match(script, /await delExpFromDatabase\(realSemana, producto, removedExp\)/);
+});
+
 test("las migraciones de esquema no ejecutan bootstrap ni cron productivo", () => {
   assert.doesNotMatch(firstAdminMarker, /PLACEHOLDER_UUID|insert into public\.user_roles/i);
   assert.match(firstAdminMarker, /select 1;/);

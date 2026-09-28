@@ -13,20 +13,23 @@ async function retryConnection(){
 
 async function testConnection(){
   const dot=document.getElementById('connDot');
+  const reconnectButton=document.getElementById('btnReconectar');
   dot.className='conn-dot loading';
+  reconnectButton.style.display='none';
   document.getElementById('connLabel').textContent='Conectando...';
   showLoading('Conectando con la base de datos...');
   try{
     const {error}=await supabaseClient.from('inventory_periods').select('id',{head:true,count:'exact'});
     if(error) throw error;
+    await fetchHistorico();
     dot.className='conn-dot ok';
     document.getElementById('connLabel').textContent='Base de datos conectada';
-    await fetchHistorico();
     showNotice('Base de datos conectada. Histórico cargado.','ok');
   }catch(e){
     dot.className='conn-dot err';
     document.getElementById('connLabel').textContent='Sin conexión';
-    showNotice('No se pudo conectar: '+e.message,'err');
+    reconnectButton.style.display='inline-flex';
+    showNotice('No se pudieron cargar los datos. Reintentá la conexión. Detalle: '+e.message,'err');
   }finally{
     hideLoading();
   }
@@ -79,7 +82,10 @@ async function fetchHistorico(){
     renderCompararSelector();actualizarSelectorSemana();
     if(currentSemana&&historico.quincenas.some(item=>item.quincena===currentSemana)) cambiarSemanaVista(currentSemana);
     else if(currentData.length) renderAll(); else cargarUltimaSemana();
-  }catch(e){console.warn('fetchHistorico:',e);}
+  }catch(e){
+    console.warn('fetchHistorico:',e);
+    throw e;
+  }
 }
 
 // ── Historial preview en landing ─────────────────────────────
@@ -536,7 +542,8 @@ function renderDetail(data){
     const lab=d.estado==='ELEVADA'?'Elevada':d.estado==='LEVE'?'Leve':'Coincide';
     const hist=prodHist[d.producto]||[];
     const histBadge=hist.length>0?`<span class="pill p-blue" style="cursor:pointer" data-action="open-panel" data-product="${actionValue(d.producto)}">📊 ${hist.length} reg.</span>`:'<span style="color:var(--text3);font-size:11px">—</span>';
-    const concBadge=d.estado!=='COINCIDE'?badgeConc(d.producto,'actual'):'<span style="color:var(--text3);font-size:11px">—</span>';
+    const reconciliationWeek=currentSemana||'actual';
+    const concBadge=d.estado!=='COINCIDE'?badgeConc(d.producto,reconciliationWeek):'<span style="color:var(--text3);font-size:11px">—</span>';
     const realCell=currentSnapshotRunId&&!currentSemana
       ?`<input class="count-input" type="number" step="any" inputmode="decimal" value="${d.counted?d.cantReal:''}" aria-label="Conteo físico de ${escapeHtml(d.producto)}" data-action="set-physical-count" data-product="${actionValue(d.producto)}">`
       :d.cantReal.toFixed(2);
@@ -1288,6 +1295,9 @@ function abrirConciliacion(producto, semana){
   const currentProd=currentData.find(d=>d.producto===producto);
   const source=histProd||currentProd;
   if(!source) return;
+  // Construir siempre el panel y su historial antes de agregar el formulario.
+  // Así Investigación funciona también cuando se abre directamente desde Semana.
+  openPanel(producto);
   const prod={
     ...source,
     cantTeo:parseFloat(source.cantTeo)||0,
@@ -1399,10 +1409,10 @@ async function guardarExplicacion(producto, semana){
   if(!causa){if(errEl){errEl.textContent='Seleccioná una causa.';errEl.style.display='block';}return;}
   const cant=parseFloat(cantStr);
   if(!cant||cant<=0){if(errEl){errEl.textContent='Ingresá una cantidad válida.';errEl.style.display='block';}return;}
-  const prod=currentData.find(d=>d.producto===producto);
-  if(!prod) return;
-  // FIX 1: Use real semana name, not 'actual'
   const realSemana=semana==='actual'?(currentSemana||'actual'):semana;
+  const prod=historico.productos.find(p=>p.producto===producto&&String(p.quincena)===String(realSemana))
+    ||currentData.find(d=>d.producto===producto);
+  if(!prod) return;
   const key=getConcKey(producto,realSemana);
   if(!conciliaciones[key]) conciliaciones[key]={estado:'PENDIENTE',explicaciones:[]};
   const conc=conciliaciones[key];
@@ -1450,11 +1460,13 @@ async function guardarExplicacion(producto, semana){
 
 async function borrarExplicacion(producto, semana, idx){
   if(!canReconcile()){showNotice('Tu rol tiene acceso de solo lectura.','err');return;}
-  const key=getConcKey(producto,semana);
+  const realSemana=semana==='actual'?(currentSemana||'actual'):semana;
+  const key=getConcKey(producto,realSemana);
   if(!conciliaciones[key]) return;
   const removedExp=conciliaciones[key].explicaciones.splice(idx,1)[0];
   // Recalculate estado
-  const prod=currentData.find(d=>d.producto===producto);
+  const prod=historico.productos.find(p=>p.producto===producto&&String(p.quincena)===String(realSemana))
+    ||currentData.find(d=>d.producto===producto);
   if(prod){
     const desvAbs=Math.abs(prod.desv)||Math.abs(prod.cantTeo-prod.cantReal);
     const expCant=conciliaciones[key].explicaciones.reduce((s,e)=>s+e.cantidad,0);
@@ -1462,8 +1474,8 @@ async function borrarExplicacion(producto, semana, idx){
     conciliaciones[key].estado=pendiente<=0.01?'CONCILIADA':expCant>0?'PARCIAL':'PENDIENTE';
   }
   try{
-    await delExpFromDatabase(semana, producto, removedExp);
-    await refreshPeriodMetrics(semana);
+    await delExpFromDatabase(realSemana, producto, removedExp);
+    await refreshPeriodMetrics(realSemana);
     showNotice('Explicación eliminada de la base de datos.','ok');
   }catch(e){
     // Restaurar en su posición si la base de datos no confirmó la eliminación.
@@ -1482,7 +1494,7 @@ async function borrarExplicacion(producto, semana, idx){
     renderAlertas(currentData);
     renderDetail(currentData);
   }
-  abrirConciliacion(producto,semana);
+  abrirConciliacion(producto,realSemana);
 }
 
 // ── Helpers de conciliación ────────────────────────────────────
