@@ -45,6 +45,9 @@ async function fetchHistorico(){
       )
     `).eq('status','CLOSED').order('recorded_at');
     if(error) throw error;
+    if(runtimeConfig?.environment==='branch-deploy'&&!(periods||[]).length){
+      throw new Error('Staging no devolvió las semanas históricas esperadas. Recargá la configuración o reintentá la conexión.');
+    }
     const metricEntries=await Promise.all((periods||[]).map(async period=>{
       const {data,error}=await supabaseClient.rpc('get_inventory_period_metrics',{p_period_id:period.id});
       if(error){console.warn('Métricas backend:',error.message);return [period.id,null];}

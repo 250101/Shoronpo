@@ -65,7 +65,7 @@ test("los campos de inventario y comentarios se renderizan escapados", () => {
 test("no quedan scripts ni eventos inline", () => {
   assert.doesNotMatch(html, /<script(?:\s[^>]*)?>\s*[^<\s]/i);
   assert.doesNotMatch(html, /\son(?:click|change|input)=/i);
-  assert.match(html, /<script src="app\.js" defer><\/script>/);
+  assert.match(html, /<script src="app\.js(?:\?v=[^"]+)?" defer><\/script>/);
   new Function(script);
 });
 
@@ -206,6 +206,10 @@ test("la carga inicial no oculta fallos del histórico y permite reintentar", ()
   assert.match(script, /await fetchHistorico\(\);\s*dot\.className='conn-dot ok'/);
   assert.match(script, /reconnectButton\.style\.display='inline-flex'/);
   assert.match(script, /catch\(e\)\{\s*console\.warn\('fetchHistorico:',e\);\s*throw e;/);
+  assert.match(script, /runtimeConfig\?\.environment==='branch-deploy'&&!\(periods\|\|\[\]\)\.length/);
+  assert.match(html, /runtime-config\.js\?v=20260929-1/);
+  assert.match(html, /app\.js\?v=20260929-1/);
+  assert.match(netlify, /for = "\/runtime-config\.js"[\s\S]*?Cache-Control = "no-store, max-age=0"/);
 });
 
 test("Investigación usa la semana real y construye el historial antes del formulario", () => {
