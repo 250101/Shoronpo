@@ -1,4 +1,5 @@
 -- Generado desde Base de datos Inventarios.xlsx. No contiene secretos.
+set role postgres;
 begin;
 
 create temporary table import_products(name text, family text, unit text) on commit drop;
@@ -301,11 +302,21 @@ insert into import_reconciliations values
 ('0cf3770a-0ac2-4f58-a526-f1878e1b91c2','S2 AGO','Comida personal','Producción no cargada',7.89,null,'2026-09-01T23:12:42.367Z'),
 ('3f7834c7-f4e1-4e6f-baa2-0993121cfb3e','S4 AGO','Fideo fino','Merma no registrada',204.0,null,'2026-09-08T10:18:12.399Z');
 
-do $$ begin
-  if not exists (select 1 from public.locations where code='OBR-TEST' and is_active) then
-    raise exception 'No existe la ubicación activa %', 'OBR-TEST';
-  end if;
-end $$;
+insert into public.locations(type,name,code,is_active,tspoon_store_external_id)
+values ('OBRADOR','Obrador Elaborados','OBR-TEST',true,'69818086292505993121792404118853282720')
+on conflict(code) do update set
+ type=excluded.type,
+ name=excluded.name,
+ is_active=true,
+ tspoon_store_external_id=coalesce(public.locations.tspoon_store_external_id,excluded.tspoon_store_external_id);
+
+insert into public.user_locations(user_id,location_id)
+select ur.user_id,l.id
+from public.user_roles ur
+join public.roles r on r.id=ur.role_id and r.code='ADMINISTRADOR'
+cross join public.locations l
+where l.code='OBR-TEST'
+on conflict(user_id,location_id) do nothing;
 
 insert into public.products(name,family,unit)
 select name,family,unit from import_products
